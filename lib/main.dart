@@ -57,6 +57,66 @@ class StorageService {
     return _prefs?.getString('theme') ?? 'dark';
   }
 
+  // ─── حفظ وتحميل المهام المنجزة ───
+  static Future<void> saveCompletedTasks(
+    List<Map<String, dynamic>> tasks,
+  ) async {
+    final list = tasks.map((task) {
+      final copy = Map<String, dynamic>.from(task);
+      if (copy['deadline'] is DateTime) {
+        copy['deadline'] = (copy['deadline'] as DateTime).toIso8601String();
+      }
+      if (copy['completedAt'] is DateTime) {
+        copy['completedAt'] = (copy['completedAt'] as DateTime)
+            .toIso8601String();
+      }
+      if (copy['calendarDate'] is DateTime) {
+        copy['calendarDate'] = (copy['calendarDate'] as DateTime)
+            .toIso8601String();
+      }
+      if (copy['calendarTime'] is TimeOfDay) {
+        final t = copy['calendarTime'] as TimeOfDay;
+        copy['calendarTime'] = '${t.hour}:${t.minute}';
+      }
+      return copy;
+    }).toList();
+    await _prefs?.setString('completedTasks', jsonEncode(list));
+  }
+
+  static List<Map<String, dynamic>> loadCompletedTasks() {
+    final data = _prefs?.getString('completedTasks');
+    if (data == null) return [];
+    final list = jsonDecode(data) as List;
+    return list.map((item) {
+      final map = Map<String, dynamic>.from(item);
+      if (map['deadline'] is String) {
+        map['deadline'] = DateTime.parse(map['deadline']);
+      }
+      if (map['completedAt'] is String) {
+        try {
+          map['completedAt'] = DateTime.parse(map['completedAt']);
+        } catch (_) {}
+      }
+      if (map['calendarDate'] is String) {
+        try {
+          map['calendarDate'] = DateTime.parse(map['calendarDate']);
+        } catch (_) {
+          map['calendarDate'] = null;
+        }
+      }
+      if (map['calendarTime'] is String) {
+        final parts = (map['calendarTime'] as String).split(':');
+        if (parts.length == 2) {
+          map['calendarTime'] = TimeOfDay(
+            hour: int.tryParse(parts[0]) ?? 9,
+            minute: int.tryParse(parts[1]) ?? 0,
+          );
+        }
+      }
+      return map;
+    }).toList();
+  }
+
   // ─── حفظ وتحميل المهام العملية ───
   static Future<void> saveTasks(List<Map<String, dynamic>> tasks) async {
     final list = tasks.map((task) {
@@ -67,8 +127,8 @@ class StorageService {
       }
       // --- جديد: حفظ calendarDate و calendarTime ---
       if (copy['calendarDate'] is DateTime) {
-        copy['calendarDate'] =
-            (copy['calendarDate'] as DateTime).toIso8601String();
+        copy['calendarDate'] = (copy['calendarDate'] as DateTime)
+            .toIso8601String();
       }
       if (copy['calendarTime'] is TimeOfDay) {
         final t = copy['calendarTime'] as TimeOfDay;
@@ -416,6 +476,14 @@ class T {
       'taskDeadlineDate': 'تاريخ الموعد في التقويم',
       'taskDeadlineTime': 'وقت الموعد في التقويم',
       'taskAddedToCalendar': 'تمت إضافة المهمة للتقويم ✅',
+      'completedTasks': 'المهام المنجزة',
+      'completedTasksFull': 'قائمة المهام المنجزة',
+      'noCompletedTasks': 'لا توجد مهام منجزة بعد',
+      'markComplete': 'تحديد كمنجزة',
+      'restoreTask': 'إرجاع للمهام النشطة',
+      'completedAt': 'أُنجزت في:',
+      'taskCompleted': 'تم إنجاز المهمة ✅',
+      'completedTasksCount': 'المنجزة',
     },
     'fr': {
       'appTitle': 'Organisateur Intelligent',
@@ -589,6 +657,14 @@ class T {
       'taskDeadlineDate': 'Date dans le calendrier',
       'taskDeadlineTime': 'Heure dans le calendrier',
       'taskAddedToCalendar': 'Tâche ajoutée au calendrier ✅',
+      'completedTasks': 'Tâches terminées',
+      'completedTasksFull': 'Liste des tâches terminées',
+      'noCompletedTasks': 'Aucune tâche terminée pour l\'instant',
+      'markComplete': 'Marquer comme terminée',
+      'restoreTask': 'Restaurer dans les tâches actives',
+      'completedAt': 'Terminée le :',
+      'taskCompleted': 'Tâche accomplie ✅',
+      'completedTasksCount': 'Terminées',
     },
     'en': {
       'appTitle': 'Smart Task Manager',
@@ -759,6 +835,14 @@ class T {
       'taskDeadlineDate': 'Calendar Date',
       'taskDeadlineTime': 'Calendar Time',
       'taskAddedToCalendar': 'Task added to calendar ✅',
+      'completedTasks': 'Completed Tasks',
+      'completedTasksFull': 'Completed Tasks List',
+      'noCompletedTasks': 'No completed tasks yet',
+      'markComplete': 'Mark as Completed',
+      'restoreTask': 'Restore to Active Tasks',
+      'completedAt': 'Completed at:',
+      'taskCompleted': 'Task completed ✅',
+      'completedTasksCount': 'Completed',
     },
   };
 
@@ -787,6 +871,7 @@ class T {
 // ==========================================
 void saveAllData() {
   StorageService.saveTasks(globalPracticalTasks);
+  StorageService.saveCompletedTasks(globalCompletedTasks);
   StorageService.saveExpenses(globalExpenses);
   StorageService.saveDebts(globalDebts);
   StorageService.saveNotes(globalNotes);
@@ -809,6 +894,7 @@ void main() async {
       : ThemeMode.dark;
 
   globalPracticalTasks.addAll(StorageService.loadTasks());
+  globalCompletedTasks.addAll(StorageService.loadCompletedTasks());
   globalExpenses.addAll(StorageService.loadExpenses());
   globalDebts.addAll(StorageService.loadDebts());
   globalNotes.addAll(StorageService.loadNotes());
@@ -839,6 +925,7 @@ String getCurrentFormattedDate() {
 }
 
 final List<Map<String, dynamic>> globalPracticalTasks = [];
+final List<Map<String, dynamic>> globalCompletedTasks = [];
 final List<Map<String, dynamic>> globalExpenses = [];
 final List<Map<String, dynamic>> globalDebts = [];
 final List<Map<String, dynamic>> globalNotes = [];
@@ -1163,47 +1250,100 @@ class _DashboardScreenState extends State<DashboardScreen> {
           child: tabs[_selectedIndex],
         ),
         floatingActionButton: _selectedIndex >= 1 && _selectedIndex <= 4
-            ? FloatingActionButton.small(
-                heroTag: 'trashFab',
-                backgroundColor: isDark
-                    ? const Color(0xFF1E293B)
-                    : Colors.white,
-                elevation: 3,
-                tooltip: T.s('trash'),
-                onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => Directionality(
-                        textDirection: globalLangNotifier.value == 'ar'
-                            ? TextDirection.rtl
-                            : TextDirection.ltr,
-                        child: Scaffold(
-                          appBar: AppBar(
-                            title: Text(
-                              T.s('trash'),
-                              style: const TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 18,
+            ? Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // زر المهام المنجزة
+                  if (_selectedIndex == 2)
+                    FloatingActionButton.small(
+                      heroTag: 'completedFab',
+                      backgroundColor: isDark
+                          ? const Color(0xFF134E3A)
+                          : const Color(0xFFD1FAE5),
+                      elevation: 3,
+                      tooltip: T.s('completedTasks'),
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => Directionality(
+                              textDirection: globalLangNotifier.value == 'ar'
+                                  ? TextDirection.rtl
+                                  : TextDirection.ltr,
+                              child: Scaffold(
+                                appBar: AppBar(
+                                  title: Text(
+                                    T.s('completedTasksFull'),
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 18,
+                                    ),
+                                  ),
+                                  centerTitle: true,
+                                  elevation: 0,
+                                  backgroundColor: const Color(0xFF10B981),
+                                ),
+                                body: const CompletedTasksTab(),
                               ),
                             ),
-                            centerTitle: true,
-                            elevation: 0,
-                            backgroundColor: isDark
-                                ? const Color(0xFF1E293B)
-                                : const Color(0xFF0284C7),
                           ),
-                          body: const TrashTab(),
-                        ),
+                        );
+                      },
+                      child: Icon(
+                        Icons.task_alt,
+                        size: 20,
+                        color: isDark
+                            ? const Color(0xFF34D399)
+                            : const Color(0xFF059669),
                       ),
                     ),
-                  );
-                },
-                child: Icon(
-                  Icons.delete_outline,
-                  size: 20,
-                  color: isDark ? Colors.redAccent.shade100 : Colors.redAccent,
-                ),
+                  if (_selectedIndex == 2) const SizedBox(height: 8),
+                  // زر سلة المهملات
+                  FloatingActionButton.small(
+                    heroTag: 'trashFab',
+                    backgroundColor: isDark
+                        ? const Color(0xFF1E293B)
+                        : Colors.white,
+                    elevation: 3,
+                    tooltip: T.s('trash'),
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => Directionality(
+                            textDirection: globalLangNotifier.value == 'ar'
+                                ? TextDirection.rtl
+                                : TextDirection.ltr,
+                            child: Scaffold(
+                              appBar: AppBar(
+                                title: Text(
+                                  T.s('trash'),
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 18,
+                                  ),
+                                ),
+                                centerTitle: true,
+                                elevation: 0,
+                                backgroundColor: isDark
+                                    ? const Color(0xFF1E293B)
+                                    : const Color(0xFF0284C7),
+                              ),
+                              body: const TrashTab(),
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                    child: Icon(
+                      Icons.delete_outline,
+                      size: 20,
+                      color: isDark
+                          ? Colors.redAccent.shade100
+                          : Colors.redAccent,
+                    ),
+                  ),
+                ],
               )
             : null,
         floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
@@ -1560,64 +1700,85 @@ class _WelcomeTabState extends State<WelcomeTab> {
                     ),
                   ),
                   const SizedBox(height: 32),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: GestureDetector(
-                          onTap: () => widget.onNavigate(1),
-                          child: _buildStatCard(
-                            T.s('calendarWidget'),
-                            '${globalCalendarEvents.where((e) {
-                              final d = e['date'] as DateTime;
-                              final now = DateTime.now();
-                              return d.year == now.year && d.month == now.month && d.day == now.day;
-                            }).length}',
-                            Icons.calendar_month,
-                            const Color(0xFF6366F1),
-                            isDark,
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: [
+                        SizedBox(
+                          width: 90,
+                          child: GestureDetector(
+                            onTap: () => widget.onNavigate(1),
+                            child: _buildStatCard(
+                              T.s('calendarWidget'),
+                              '${globalCalendarEvents.where((e) {
+                                final d = e['date'] as DateTime;
+                                final now = DateTime.now();
+                                return d.year == now.year && d.month == now.month && d.day == now.day;
+                              }).length}',
+                              Icons.calendar_month,
+                              const Color(0xFF6366F1),
+                              isDark,
+                            ),
                           ),
                         ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: GestureDetector(
-                          onTap: () => widget.onNavigate(2),
-                          child: _buildStatCard(
-                            T.s('practicalTasksCount'),
-                            '${globalPracticalTasks.length}',
-                            Icons.business_center,
-                            const Color(0xFF0284C7),
-                            isDark,
+                        const SizedBox(width: 8),
+                        SizedBox(
+                          width: 90,
+                          child: GestureDetector(
+                            onTap: () => widget.onNavigate(2),
+                            child: _buildStatCard(
+                              T.s('practicalTasksCount'),
+                              '${globalPracticalTasks.length}',
+                              Icons.business_center,
+                              const Color(0xFF0284C7),
+                              isDark,
+                            ),
                           ),
                         ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: GestureDetector(
-                          onTap: () => widget.onNavigate(3),
-                          child: _buildStatCard(
-                            T.s('financialSummary'),
-                            '${netTotal.toStringAsFixed(0)}',
-                            Icons.account_balance_wallet,
-                            const Color(0xFFF43F5E),
-                            isDark,
+                        const SizedBox(width: 8),
+                        SizedBox(
+                          width: 90,
+                          child: GestureDetector(
+                            onTap: () => widget.onNavigate(2),
+                            child: _buildStatCard(
+                              T.s('completedTasksCount'),
+                              '${globalCompletedTasks.length}',
+                              Icons.task_alt,
+                              const Color(0xFF10B981),
+                              isDark,
+                            ),
                           ),
                         ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: GestureDetector(
-                          onTap: () => widget.onNavigate(4),
-                          child: _buildStatCard(
-                            T.s('notesCount'),
-                            '${globalNotes.length}',
-                            Icons.note_alt,
-                            const Color(0xFF10B981),
-                            isDark,
+                        const SizedBox(width: 8),
+                        SizedBox(
+                          width: 90,
+                          child: GestureDetector(
+                            onTap: () => widget.onNavigate(3),
+                            child: _buildStatCard(
+                              T.s('financialSummary'),
+                              '${netTotal.toStringAsFixed(0)}',
+                              Icons.account_balance_wallet,
+                              const Color(0xFFF43F5E),
+                              isDark,
+                            ),
                           ),
                         ),
-                      ),
-                    ],
+                        const SizedBox(width: 8),
+                        SizedBox(
+                          width: 90,
+                          child: GestureDetector(
+                            onTap: () => widget.onNavigate(4),
+                            child: _buildStatCard(
+                              T.s('notesCount'),
+                              '${globalNotes.length}',
+                              Icons.note_alt,
+                              const Color(0xFFF59E0B),
+                              isDark,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ],
               ),
@@ -1943,7 +2104,8 @@ class _PracticalTasksTabState extends State<PracticalTasksTab> {
                       onTap: () async {
                         final picked = await showTimePicker(
                           context: context,
-                          initialTime: calendarTime ??
+                          initialTime:
+                              calendarTime ??
                               const TimeOfDay(hour: 9, minute: 0),
                         );
                         if (picked != null) {
@@ -2031,8 +2193,7 @@ class _PracticalTasksTabState extends State<PracticalTasksTab> {
                     if (index != null) {
                       globalCalendarEvents.removeWhere(
                         (e) =>
-                            e['sourceTaskTitle'] ==
-                                existingTask?['title'] &&
+                            e['sourceTaskTitle'] == existingTask?['title'] &&
                             e['isFromTask'] == true,
                       );
                     }
@@ -2115,174 +2276,234 @@ class _PracticalTasksTabState extends State<PracticalTasksTab> {
                       final DateTime deadline = task['deadline'];
                       final timeInfo = _calculateRemainingTime(deadline);
                       bool isUrgent = timeInfo['isUrgent'];
+                      final bool isDone = task['done'] == true;
 
-                      return Container(
-                        margin: const EdgeInsets.only(bottom: 12),
-                        decoration: BoxDecoration(
-                          color: isDark
-                              ? const Color(0xFF1E293B)
-                              : Colors.white,
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(
-                            color: isUrgent
-                                ? Colors.red.shade400
+                      return GestureDetector(
+                        onTap: () {
+                          // تحديد المهمة كمنجزة عند الضغط عليها
+                          setState(() {
+                            final completedTask = Map<String, dynamic>.from(
+                              task,
+                            );
+                            completedTask['done'] = true;
+                            completedTask['completedAt'] = DateTime.now();
+                            globalCompletedTasks.insert(0, completedTask);
+                            globalPracticalTasks.removeAt(index);
+                          });
+                          StorageService.saveTasks(globalPracticalTasks);
+                          StorageService.saveCompletedTasks(
+                            globalCompletedTasks,
+                          );
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(T.s('taskCompleted')),
+                              backgroundColor: const Color(0xFF10B981),
+                              duration: const Duration(seconds: 2),
+                              behavior: SnackBarBehavior.floating,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                            ),
+                          );
+                        },
+                        child: Container(
+                          margin: const EdgeInsets.only(bottom: 12),
+                          decoration: BoxDecoration(
+                            color: isDone
+                                ? (isDark
+                                      ? const Color(0xFF134E3A)
+                                      : const Color(0xFFD1FAE5))
                                 : (isDark
-                                      ? Colors.white12
-                                      : navyBlue.withOpacity(0.2)),
-                            width: isUrgent ? 2 : 1,
-                          ),
-                          boxShadow: isDark
-                              ? null
-                              : [
-                                  BoxShadow(
-                                    color: isUrgent
-                                        ? Colors.red.withOpacity(0.05)
-                                        : navyBlue.withOpacity(0.05),
-                                    blurRadius: 10,
-                                    offset: const Offset(0, 4),
-                                  ),
-                                ],
-                        ),
-                        child: ListTile(
-                          contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 8,
-                          ),
-                          title: Text(
-                            task['title'],
-                            style: const TextStyle(fontWeight: FontWeight.bold),
-                          ),
-                          subtitle: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              if (task['desc'].toString().isNotEmpty) ...[
-                                const SizedBox(height: 4),
-                                Text(
-                                  task['desc'],
-                                  style: TextStyle(
-                                    color: isDark
-                                        ? Colors.white70
-                                        : const Color(0xFF64748B),
-                                  ),
-                                ),
-                              ],
-                              const SizedBox(height: 8),
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 10,
-                                  vertical: 4,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: isUrgent
-                                      ? Colors.red.shade50
-                                      : (isDark
-                                            ? Colors.white10
-                                            : const Color(0xFFF1F5F9)),
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(
-                                      Icons.access_time_filled,
-                                      size: 14,
-                                      color: isUrgent ? Colors.red : navyBlue,
-                                    ),
-                                    const SizedBox(width: 6),
-                                    Text(
-                                      timeInfo['text'],
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.bold,
-                                        color: isUrgent
-                                            ? Colors.red
-                                            : (isDark
-                                                  ? Colors.white70
-                                                  : navyBlue),
-                                      ),
+                                      ? const Color(0xFF1E293B)
+                                      : Colors.white),
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(
+                              color: isDone
+                                  ? const Color(0xFF10B981)
+                                  : isUrgent
+                                  ? Colors.red.shade400
+                                  : (isDark
+                                        ? Colors.white12
+                                        : navyBlue.withOpacity(0.2)),
+                              width: isUrgent ? 2 : 1,
+                            ),
+                            boxShadow: isDark
+                                ? null
+                                : [
+                                    BoxShadow(
+                                      color: isUrgent
+                                          ? Colors.red.withOpacity(0.05)
+                                          : navyBlue.withOpacity(0.05),
+                                      blurRadius: 10,
+                                      offset: const Offset(0, 4),
                                     ),
                                   ],
-                                ),
+                          ),
+                          child: ListTile(
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 8,
+                            ),
+                            leading: Icon(
+                              isDone
+                                  ? Icons.check_circle
+                                  : Icons.radio_button_unchecked,
+                              color: isDone
+                                  ? const Color(0xFF10B981)
+                                  : Colors.grey.shade400,
+                              size: 26,
+                            ),
+                            title: Text(
+                              task['title'],
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                decoration: isDone
+                                    ? TextDecoration.lineThrough
+                                    : TextDecoration.none,
+                                color: isDone
+                                    ? (isDark
+                                          ? Colors.white54
+                                          : Colors.grey.shade500)
+                                    : null,
                               ),
-                              // --- جديد: شارة التقويم ---
-                              if (task['calendarDate'] != null) ...[
-                                const SizedBox(height: 4),
+                            ),
+                            subtitle: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                if (task['desc'].toString().isNotEmpty) ...[
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    task['desc'],
+                                    style: TextStyle(
+                                      color: isDark
+                                          ? Colors.white70
+                                          : const Color(0xFF64748B),
+                                      decoration: isDone
+                                          ? TextDecoration.lineThrough
+                                          : TextDecoration.none,
+                                    ),
+                                  ),
+                                ],
+                                const SizedBox(height: 8),
                                 Container(
                                   padding: const EdgeInsets.symmetric(
-                                    horizontal: 8,
-                                    vertical: 3,
+                                    horizontal: 10,
+                                    vertical: 4,
                                   ),
                                   decoration: BoxDecoration(
-                                    color: const Color(0xFF6366F1).withOpacity(
-                                      0.12,
-                                    ),
+                                    color: isUrgent
+                                        ? Colors.red.shade50
+                                        : (isDark
+                                              ? Colors.white10
+                                              : const Color(0xFFF1F5F9)),
                                     borderRadius: BorderRadius.circular(8),
                                   ),
                                   child: Row(
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
-                                      const Icon(
-                                        Icons.event_available,
-                                        size: 13,
-                                        color: Color(0xFF6366F1),
+                                      Icon(
+                                        Icons.access_time_filled,
+                                        size: 14,
+                                        color: isUrgent ? Colors.red : navyBlue,
                                       ),
-                                      const SizedBox(width: 4),
+                                      const SizedBox(width: 6),
                                       Text(
-                                        () {
-                                          final d = task['calendarDate']
-                                              as DateTime;
-                                          final t = task['calendarTime']
-                                              as TimeOfDay?;
-                                          String dateStr =
-                                              '${d.day}/${d.month}/${d.year}';
-                                          if (t != null) {
-                                            dateStr +=
-                                                '  ${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
-                                          }
-                                          return dateStr;
-                                        }(),
-                                        style: const TextStyle(
-                                          fontSize: 11,
-                                          color: Color(0xFF6366F1),
-                                          fontWeight: FontWeight.w600,
+                                        timeInfo['text'],
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.bold,
+                                          color: isUrgent
+                                              ? Colors.red
+                                              : (isDark
+                                                    ? Colors.white70
+                                                    : navyBlue),
                                         ),
                                       ),
                                     ],
                                   ),
                                 ),
-                              ],
-                            ],
-                          ),
-                          trailing: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              IconButton(
-                                icon: Icon(Icons.edit, color: navyBlue),
-                                onPressed: () => _openAddTaskDialog(
-                                  existingTask: task,
-                                  index: index,
-                                ),
-                              ),
-                              IconButton(
-                                icon: const Icon(
-                                  Icons.delete_outline,
-                                  color: Colors.redAccent,
-                                ),
-                                onPressed: () => setState(() {
-                                  globalTrash.add({
-                                    'type': T.s('typeTask'),
-                                    'title': task['title'],
-                                    'data': globalPracticalTasks.removeAt(
-                                      index,
+                                // --- شارة التقويم ---
+                                if (task['calendarDate'] != null) ...[
+                                  const SizedBox(height: 4),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                      vertical: 3,
                                     ),
-                                  });
-                                  StorageService.saveTasks(
-                                    globalPracticalTasks,
-                                  );
-                                  StorageService.saveTrash(globalTrash);
-                                }),
-                              ),
-                            ],
+                                    decoration: BoxDecoration(
+                                      color: const Color(
+                                        0xFF6366F1,
+                                      ).withOpacity(0.12),
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        const Icon(
+                                          Icons.event_available,
+                                          size: 13,
+                                          color: Color(0xFF6366F1),
+                                        ),
+                                        const SizedBox(width: 4),
+                                        Text(
+                                          () {
+                                            final d =
+                                                task['calendarDate']
+                                                    as DateTime;
+                                            final t =
+                                                task['calendarTime']
+                                                    as TimeOfDay?;
+                                            String dateStr =
+                                                '${d.day}/${d.month}/${d.year}';
+                                            if (t != null) {
+                                              dateStr +=
+                                                  '  ${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
+                                            }
+                                            return dateStr;
+                                          }(),
+                                          style: const TextStyle(
+                                            fontSize: 11,
+                                            color: Color(0xFF6366F1),
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                            trailing: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                IconButton(
+                                  icon: Icon(Icons.edit, color: navyBlue),
+                                  onPressed: () => _openAddTaskDialog(
+                                    existingTask: task,
+                                    index: index,
+                                  ),
+                                ),
+                                IconButton(
+                                  icon: const Icon(
+                                    Icons.delete_outline,
+                                    color: Colors.redAccent,
+                                  ),
+                                  onPressed: () => setState(() {
+                                    globalTrash.add({
+                                      'type': T.s('typeTask'),
+                                      'title': task['title'],
+                                      'data': globalPracticalTasks.removeAt(
+                                        index,
+                                      ),
+                                    });
+                                    StorageService.saveTasks(
+                                      globalPracticalTasks,
+                                    );
+                                    StorageService.saveTrash(globalTrash);
+                                  }),
+                                ),
+                              ],
+                            ),
                           ),
                         ),
                       );
@@ -3905,6 +4126,312 @@ class _NotesTabState extends State<NotesTab> {
                 );
               },
             ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ==========================================
+// 5.A شاشة المهام المنجزة
+// ==========================================
+class CompletedTasksTab extends StatefulWidget {
+  const CompletedTasksTab({Key? key}) : super(key: key);
+  @override
+  State<CompletedTasksTab> createState() => _CompletedTasksTabState();
+}
+
+class _CompletedTasksTabState extends State<CompletedTasksTab> {
+  final Color navyBlue = const Color(0xFF1A237E);
+
+  @override
+  void initState() {
+    super.initState();
+    globalLangNotifier.addListener(_onLangChange);
+  }
+
+  @override
+  void dispose() {
+    globalLangNotifier.removeListener(_onLangChange);
+    super.dispose();
+  }
+
+  void _onLangChange() => setState(() {});
+
+  void _openEditDialog(Map<String, dynamic> task, int index) {
+    final titleCtrl = TextEditingController(text: task['title'] ?? '');
+    final descCtrl = TextEditingController(text: task['desc'] ?? '');
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => Directionality(
+          textDirection: globalLangNotifier.value == 'ar'
+              ? TextDirection.rtl
+              : TextDirection.ltr,
+          child: AlertDialog(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+            title: Text(
+              T.s('editTaskTitle'),
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+            ),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: titleCtrl,
+                    decoration: InputDecoration(labelText: T.s('taskName')),
+                  ),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: descCtrl,
+                    decoration: InputDecoration(labelText: T.s('taskDesc')),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: Text(T.s('cancel')),
+              ),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF10B981),
+                ),
+                onPressed: () {
+                  if (titleCtrl.text.isEmpty) return;
+                  setState(() {
+                    globalCompletedTasks[index] = {
+                      ...globalCompletedTasks[index],
+                      'title': titleCtrl.text,
+                      'desc': descCtrl.text,
+                    };
+                  });
+                  StorageService.saveCompletedTasks(globalCompletedTasks);
+                  Navigator.pop(context);
+                },
+                child: Text(
+                  T.s('save'),
+                  style: const TextStyle(color: Colors.white),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return Padding(
+      padding: const EdgeInsets.all(16.0),
+      child: Column(
+        children: [
+          // رأس الصفحة
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [Color(0xFF10B981), Color(0xFF34D399)],
+              ),
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.check_circle, color: Colors.white, size: 22),
+                const SizedBox(width: 10),
+                Text(
+                  '${T.s('completedTasksFull')} (${globalCompletedTasks.length})',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 15,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+          Expanded(
+            child: globalCompletedTasks.isEmpty
+                ? Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.task_alt,
+                          size: 64,
+                          color: Colors.grey.shade300,
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          T.s('noCompletedTasks'),
+                          style: TextStyle(color: Colors.grey.shade500),
+                        ),
+                      ],
+                    ),
+                  )
+                : ListView.builder(
+                    itemCount: globalCompletedTasks.length,
+                    itemBuilder: (context, index) {
+                      final task = globalCompletedTasks[index];
+                      final completedAt = task['completedAt'] as DateTime?;
+
+                      return Container(
+                        margin: const EdgeInsets.only(bottom: 12),
+                        decoration: BoxDecoration(
+                          color: isDark
+                              ? const Color(0xFF134E3A)
+                              : const Color(0xFFECFDF5),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(
+                            color: const Color(0xFF10B981).withOpacity(0.4),
+                          ),
+                        ),
+                        child: ListTile(
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 8,
+                          ),
+                          leading: const Icon(
+                            Icons.check_circle,
+                            color: Color(0xFF10B981),
+                            size: 28,
+                          ),
+                          title: Text(
+                            task['title'] ?? '',
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              decoration: TextDecoration.lineThrough,
+                              decorationThickness: 2,
+                            ),
+                          ),
+                          subtitle: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              if ((task['desc'] ?? '')
+                                  .toString()
+                                  .isNotEmpty) ...[
+                                const SizedBox(height: 4),
+                                Text(
+                                  task['desc'],
+                                  style: TextStyle(
+                                    color: isDark
+                                        ? Colors.white60
+                                        : Colors.grey.shade600,
+                                    decoration: TextDecoration.lineThrough,
+                                  ),
+                                ),
+                              ],
+                              if (completedAt != null) ...[
+                                const SizedBox(height: 6),
+                                Row(
+                                  children: [
+                                    const Icon(
+                                      Icons.check_circle_outline,
+                                      size: 13,
+                                      color: Color(0xFF10B981),
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      '${T.s('completedAt')} ${completedAt.day}/${completedAt.month}/${completedAt.year}  ${completedAt.hour.toString().padLeft(2, '0')}:${completedAt.minute.toString().padLeft(2, '0')}',
+                                      style: const TextStyle(
+                                        fontSize: 11,
+                                        color: Color(0xFF10B981),
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ],
+                          ),
+                          trailing: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              // زر التعديل
+                              IconButton(
+                                icon: Icon(
+                                  Icons.edit,
+                                  color: navyBlue,
+                                  size: 20,
+                                ),
+                                tooltip: T.s('edit'),
+                                onPressed: () => _openEditDialog(task, index),
+                              ),
+                              // زر الإرجاع للمهام النشطة
+                              IconButton(
+                                icon: const Icon(
+                                  Icons.undo_rounded,
+                                  color: Color(0xFF0284C7),
+                                  size: 22,
+                                ),
+                                tooltip: T.s('restoreTask'),
+                                onPressed: () {
+                                  setState(() {
+                                    final restored = Map<String, dynamic>.from(
+                                      globalCompletedTasks.removeAt(index),
+                                    );
+                                    restored.remove('completedAt');
+                                    restored['done'] = false;
+                                    // إعادة حساب الـ deadline من الآن إذا انتهى
+                                    final dl = restored['deadline'] as DateTime;
+                                    if (dl.isBefore(DateTime.now())) {
+                                      restored['deadline'] = DateTime.now().add(
+                                        const Duration(hours: 1),
+                                      );
+                                    }
+                                    globalPracticalTasks.insert(0, restored);
+                                  });
+                                  StorageService.saveTasks(
+                                    globalPracticalTasks,
+                                  );
+                                  StorageService.saveCompletedTasks(
+                                    globalCompletedTasks,
+                                  );
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text(T.s('restoreSuccess')),
+                                      backgroundColor: const Color(0xFF0284C7),
+                                      behavior: SnackBarBehavior.floating,
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(10),
+                                      ),
+                                    ),
+                                  );
+                                },
+                              ),
+                              // زر الحذف النهائي
+                              IconButton(
+                                icon: const Icon(
+                                  Icons.delete_outline,
+                                  color: Colors.redAccent,
+                                  size: 20,
+                                ),
+                                onPressed: () {
+                                  setState(() {
+                                    globalCompletedTasks.removeAt(index);
+                                  });
+                                  StorageService.saveCompletedTasks(
+                                    globalCompletedTasks,
+                                  );
+                                },
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  ),
           ),
         ],
       ),
