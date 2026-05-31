@@ -3,9 +3,11 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 
-final ValueNotifier<ThemeMode> globalThemeNotifier =
-ValueNotifier(ThemeMode.dark);
+final ValueNotifier<ThemeMode> globalThemeNotifier = ValueNotifier(
+  ThemeMode.dark,
+);
 final ValueNotifier<String> globalLangNotifier = ValueNotifier('ar');
+final ValueNotifier<String> globalCurrencyNotifier = ValueNotifier('🇸🇦 SAR');
 String globalUserName = '';
 
 // ==========================================
@@ -37,6 +39,15 @@ class StorageService {
     return _prefs?.getString('lang') ?? 'ar';
   }
 
+  // ─── حفظ وتحميل العملة ───
+  static Future<void> saveCurrency(String currency) async {
+    await _prefs?.setString('currency', currency);
+  }
+
+  static String loadCurrency() {
+    return _prefs?.getString('currency') ?? '🇸🇦 SAR';
+  }
+
   // ─── حفظ وتحميل الثيم ───
   static Future<void> saveTheme(String theme) async {
     await _prefs?.setString('theme', theme);
@@ -54,6 +65,15 @@ class StorageService {
       if (copy['deadline'] is DateTime) {
         copy['deadline'] = (copy['deadline'] as DateTime).toIso8601String();
       }
+      // --- جديد: حفظ calendarDate و calendarTime ---
+      if (copy['calendarDate'] is DateTime) {
+        copy['calendarDate'] =
+            (copy['calendarDate'] as DateTime).toIso8601String();
+      }
+      if (copy['calendarTime'] is TimeOfDay) {
+        final t = copy['calendarTime'] as TimeOfDay;
+        copy['calendarTime'] = '${t.hour}:${t.minute}';
+      }
       return copy;
     }).toList();
     await _prefs?.setString('tasks', jsonEncode(list));
@@ -68,6 +88,23 @@ class StorageService {
       // استعادة DateTime من String
       if (map['deadline'] is String) {
         map['deadline'] = DateTime.parse(map['deadline']);
+      }
+      // --- جديد: استعادة calendarDate و calendarTime ---
+      if (map['calendarDate'] is String) {
+        try {
+          map['calendarDate'] = DateTime.parse(map['calendarDate']);
+        } catch (_) {
+          map['calendarDate'] = null;
+        }
+      }
+      if (map['calendarTime'] is String) {
+        final parts = (map['calendarTime'] as String).split(':');
+        if (parts.length == 2) {
+          map['calendarTime'] = TimeOfDay(
+            hour: int.tryParse(parts[0]) ?? 9,
+            minute: int.tryParse(parts[1]) ?? 0,
+          );
+        }
       }
       return map;
     }).toList();
@@ -117,12 +154,11 @@ class StorageService {
       if (copy['data'] is Map) {
         final dataCopy = Map<String, dynamic>.from(copy['data']);
         if (dataCopy['deadline'] is DateTime) {
-          dataCopy['deadline'] =
-              (dataCopy['deadline'] as DateTime).toIso8601String();
+          dataCopy['deadline'] = (dataCopy['deadline'] as DateTime)
+              .toIso8601String();
         }
         if (dataCopy['date'] is DateTime) {
-          dataCopy['date'] =
-              (dataCopy['date'] as DateTime).toIso8601String();
+          dataCopy['date'] = (dataCopy['date'] as DateTime).toIso8601String();
         }
         if (dataCopy['time'] is TimeOfDay) {
           final t = dataCopy['time'] as TimeOfDay;
@@ -168,7 +204,8 @@ class StorageService {
 
   // ─── حفظ وتحميل مواعيد التقويم ───
   static Future<void> saveCalendarEvents(
-      List<Map<String, dynamic>> events) async {
+    List<Map<String, dynamic>> events,
+  ) async {
     final list = events.map((event) {
       final copy = Map<String, dynamic>.from(event);
       if (copy['date'] is DateTime) {
@@ -222,7 +259,8 @@ class T {
       'open': 'فتح',
       'language': 'اللغة',
       'goHome': 'الرئيسية',
-      'welcome': 'مرحباً بك!', 'enterName': 'ما هو اسمك؟',
+      'welcome': 'مرحباً بك!',
+      'enterName': 'ما هو اسمك؟',
       'startUsing': 'بدء الاستخدام',
       'homeWelcome': 'الرئيسية الترحيبية',
       'practicalTasksFull': 'المهام العملية والتوقيت',
@@ -310,14 +348,17 @@ class T {
       'restore': 'استرجاع فوري',
       'deletePermanent': 'حذف نهائي',
       'restoreSuccess': 'تم استرجاع العنصر إلى قسمه بنجاح ودون تأخير!',
-      'typeTask': 'مهمة عملية', 'typeNote': 'ملاحظة',
-      'typeExpense': 'عملية مالية', 'typeDebt': 'مديونية',
+      'typeTask': 'مهمة عملية',
+      'typeNote': 'ملاحظة',
+      'typeExpense': 'عملية مالية',
+      'typeDebt': 'مديونية',
       'q1': 'إن لم تبدأ اليوم، فلن تنتهي غداً. السر يكمن دائماً في البداية.',
       'q2': 'إنجازك اليوم هو الحجر الأساس لبناء نجاحات الغد العظيمة.',
       'q3': 'لا تنتظر الظروف المثالية لتنجز، اصنع ظروفك الخاصة وانطلق.',
       'q4': 'التخطيط الجيد والخطوات الصغيرة المستمرة تصنع فارقاً مهولاً.',
       'q5': 'المفاتيح الأساسية للإنتاجية: التركيز المطلق وتحديد الأولويات.',
-      'installmentPrefix': 'قسط:', 'installmentPayPrefix': 'سداد قسط:',
+      'installmentPrefix': 'قسط:',
+      'installmentPayPrefix': 'سداد قسط:',
       'calendar': 'التقويم الذكي',
       'calendarFull': 'التقويم والمواعيد',
       'addEvent': 'إضافة موعد جديد',
@@ -330,26 +371,51 @@ class T {
       'eventType': 'نوع الموعد',
       'noEvents': 'لا توجد مواعيد لهذا اليوم',
       'noEventsMonth': 'لا توجد مواعيد لهذا الشهر',
-      'today': 'اليوم', 'tomorrow': 'غداً', 'upcoming': 'القادمة',
+      'today': 'اليوم',
+      'tomorrow': 'غداً',
+      'upcoming': 'القادمة',
       'allEvents': 'جميع المواعيد',
-      'evtMeeting': 'اجتماع', 'evtAppointment': 'موعد طبي', 'evttask': 'مهمة',
-      'evtReminder': 'تذكير', 'evtPersonal': 'شخصي', 'evtOther': 'أخرى',
-      'selectDate': 'اختر التاريخ', 'selectTime': 'اختر الوقت',
-      'calendarWidget': 'التقويم', 'eventsToday': 'مواعيد اليوم',
+      'evtMeeting': 'اجتماع',
+      'evtAppointment': 'موعد طبي',
+      'evttask': 'مهمة',
+      'evtReminder': 'تذكير',
+      'evtPersonal': 'شخصي',
+      'evtOther': 'أخرى',
+      'selectDate': 'اختر التاريخ',
+      'selectTime': 'اختر الوقت',
+      'calendarWidget': 'التقويم',
+      'eventsToday': 'مواعيد اليوم',
       'nextEvent': 'الموعد القادم',
-      'mon': 'اث', 'tue': 'ثل', 'wed': 'أر', 'thu': 'خم', 'fri': 'جم',
-      'sat': 'سب', 'sun': 'أح',
-      'jan': 'يناير', 'feb': 'فبراير', 'mar': 'مارس', 'apr': 'أبريل',
-      'may': 'مايو', 'jun': 'يونيو',
-      'jul': 'يوليو', 'aug': 'أغسطس', 'sep': 'سبتمبر', 'oct': 'أكتوبر',
-      'nov': 'نوفمبر', 'dec': 'ديسمبر',
+      'mon': 'اث',
+      'tue': 'ثل',
+      'wed': 'أر',
+      'thu': 'خم',
+      'fri': 'جم',
+      'sat': 'سب',
+      'sun': 'أح',
+      'jan': 'يناير',
+      'feb': 'فبراير',
+      'mar': 'مارس',
+      'apr': 'أبريل',
+      'may': 'مايو',
+      'jun': 'يونيو',
+      'jul': 'يوليو',
+      'aug': 'أغسطس',
+      'sep': 'سبتمبر',
+      'oct': 'أكتوبر',
+      'nov': 'نوفمبر',
+      'dec': 'ديسمبر',
       'typeCalendar': 'موعد تقويم',
       'deleteEventConfirmTitle': 'تأكيد الحذف',
       'deleteEventConfirmMsg':
-      'هل تريد حذف هذا الموعد؟ سيُنقل إلى سلة المهملات.',
+          'هل تريد حذف هذا الموعد؟ سيُنقل إلى سلة المهملات.',
       'deleteConfirmYes': 'حذف',
       'eventDone': 'تم إنجاز الموعد',
       'markDone': 'تحديد كمنجز',
+      'addToCalendar': 'إضافة للتقويم',
+      'taskDeadlineDate': 'تاريخ الموعد في التقويم',
+      'taskDeadlineTime': 'وقت الموعد في التقويم',
+      'taskAddedToCalendar': 'تمت إضافة المهمة للتقويم ✅',
     },
     'fr': {
       'appTitle': 'Organisateur Intelligent',
@@ -362,7 +428,8 @@ class T {
       'open': 'Ouvrir',
       'language': 'Langue',
       'goHome': 'Accueil',
-      'welcome': 'Bienvenue !', 'enterName': 'Quel est votre nom ?',
+      'welcome': 'Bienvenue !',
+      'enterName': 'Quel est votre nom ?',
       'startUsing': 'Commencer',
       'homeWelcome': 'Accueil principal',
       'practicalTasksFull': 'Tâches & Horaires',
@@ -450,18 +517,21 @@ class T {
       'restore': 'Restaurer',
       'deletePermanent': 'Supprimer définitivement',
       'restoreSuccess': 'Élément restauré avec succès !',
-      'typeTask': 'Tâche pratique', 'typeNote': 'Note',
-      'typeExpense': 'Transaction financière', 'typeDebt': 'Dette',
+      'typeTask': 'Tâche pratique',
+      'typeNote': 'Note',
+      'typeExpense': 'Transaction financière',
+      'typeDebt': 'Dette',
       'q1':
-      'Si vous ne commencez pas aujourd\'hui, vous ne finirez pas demain.',
+          'Si vous ne commencez pas aujourd\'hui, vous ne finirez pas demain.',
       'q2':
-      'Votre accomplissement d\'aujourd\'hui est la base du succès de demain.',
+          'Votre accomplissement d\'aujourd\'hui est la base du succès de demain.',
       'q3': 'N\'attendez pas les conditions idéales, créez les vôtres.',
       'q4':
-      'Une bonne planification et de petites étapes régulières font une grande différence.',
+          'Une bonne planification et de petites étapes régulières font une grande différence.',
       'q5':
-      'Les clés de la productivité : concentration totale et priorisation.',
-      'installmentPrefix': 'Versement :', 'installmentPayPrefix': 'Paiement :',
+          'Les clés de la productivité : concentration totale et priorisation.',
+      'installmentPrefix': 'Versement :',
+      'installmentPayPrefix': 'Paiement :',
       'calendar': 'Calendrier',
       'calendarFull': 'Calendrier & Rendez-vous',
       'addEvent': 'Ajouter un événement',
@@ -474,7 +544,9 @@ class T {
       'eventType': 'Type d\'événement',
       'noEvents': 'Aucun événement pour ce jour',
       'noEventsMonth': 'Aucun événement ce mois',
-      'today': 'Aujourd\'hui', 'tomorrow': 'Demain', 'upcoming': 'À venir',
+      'today': 'Aujourd\'hui',
+      'tomorrow': 'Demain',
+      'upcoming': 'À venir',
       'allEvents': 'Tous les événements',
       'evtMeeting': 'Réunion',
       'evtAppointment': 'Rendez-vous médical',
@@ -482,22 +554,41 @@ class T {
       'evtReminder': 'Rappel',
       'evtPersonal': 'Personnel',
       'evtOther': 'Autre',
-      'selectDate': 'Choisir la date', 'selectTime': 'Choisir l\'heure',
-      'calendarWidget': 'Calendrier', 'eventsToday': 'Événements du jour',
+      'selectDate': 'Choisir la date',
+      'selectTime': 'Choisir l\'heure',
+      'calendarWidget': 'Calendrier',
+      'eventsToday': 'Événements du jour',
       'nextEvent': 'Prochain événement',
-      'mon': 'Lu', 'tue': 'Ma', 'wed': 'Me', 'thu': 'Je', 'fri': 'Ve',
-      'sat': 'Sa', 'sun': 'Di',
-      'jan': 'Janvier', 'feb': 'Février', 'mar': 'Mars', 'apr': 'Avril',
-      'may': 'Mai', 'jun': 'Juin',
-      'jul': 'Juillet', 'aug': 'Août', 'sep': 'Septembre', 'oct': 'Octobre',
-      'nov': 'Novembre', 'dec': 'Décembre',
+      'mon': 'Lu',
+      'tue': 'Ma',
+      'wed': 'Me',
+      'thu': 'Je',
+      'fri': 'Ve',
+      'sat': 'Sa',
+      'sun': 'Di',
+      'jan': 'Janvier',
+      'feb': 'Février',
+      'mar': 'Mars',
+      'apr': 'Avril',
+      'may': 'Mai',
+      'jun': 'Juin',
+      'jul': 'Juillet',
+      'aug': 'Août',
+      'sep': 'Septembre',
+      'oct': 'Octobre',
+      'nov': 'Novembre',
+      'dec': 'Décembre',
       'typeCalendar': 'Événement calendrier',
       'deleteEventConfirmTitle': 'Confirmer la suppression',
       'deleteEventConfirmMsg':
-      'Voulez-vous supprimer cet événement ? Il sera déplacé vers la corbeille.',
+          'Voulez-vous supprimer cet événement ? Il sera déplacé vers la corbeille.',
       'deleteConfirmYes': 'Supprimer',
       'eventDone': 'Événement terminé',
       'markDone': 'Marquer comme terminé',
+      'addToCalendar': 'Ajouter au calendrier',
+      'taskDeadlineDate': 'Date dans le calendrier',
+      'taskDeadlineTime': 'Heure dans le calendrier',
+      'taskAddedToCalendar': 'Tâche ajoutée au calendrier ✅',
     },
     'en': {
       'appTitle': 'Smart Task Manager',
@@ -510,7 +601,8 @@ class T {
       'open': 'Open',
       'language': 'Language',
       'goHome': 'Home',
-      'welcome': 'Welcome!', 'enterName': 'What is your name?',
+      'welcome': 'Welcome!',
+      'enterName': 'What is your name?',
       'startUsing': 'Get Started',
       'homeWelcome': 'Home Screen',
       'practicalTasksFull': 'Tasks & Schedule',
@@ -598,16 +690,19 @@ class T {
       'restore': 'Restore',
       'deletePermanent': 'Delete Permanently',
       'restoreSuccess': 'Item restored to its section successfully!',
-      'typeTask': 'Practical Task', 'typeNote': 'Note',
-      'typeExpense': 'Financial Transaction', 'typeDebt': 'Debt',
+      'typeTask': 'Practical Task',
+      'typeNote': 'Note',
+      'typeExpense': 'Financial Transaction',
+      'typeDebt': 'Debt',
       'q1': 'If you don\'t start today, you won\'t finish tomorrow.',
       'q2':
-      'Today\'s achievement is the foundation for tomorrow\'s great successes.',
+          'Today\'s achievement is the foundation for tomorrow\'s great successes.',
       'q3':
-      'Don\'t wait for perfect conditions, create your own and move forward.',
+          'Don\'t wait for perfect conditions, create your own and move forward.',
       'q4': 'Good planning and consistent small steps make a huge difference.',
       'q5': 'The keys to productivity: absolute focus and setting priorities.',
-      'installmentPrefix': 'Installment:', 'installmentPayPrefix': 'Payment:',
+      'installmentPrefix': 'Installment:',
+      'installmentPayPrefix': 'Payment:',
       'calendar': 'Smart Calendar',
       'calendarFull': 'Calendar & Appointments',
       'addEvent': 'Add New Event',
@@ -620,7 +715,9 @@ class T {
       'eventType': 'Event Type',
       'noEvents': 'No events for this day',
       'noEventsMonth': 'No events this month',
-      'today': 'Today', 'tomorrow': 'Tomorrow', 'upcoming': 'Upcoming',
+      'today': 'Today',
+      'tomorrow': 'Tomorrow',
+      'upcoming': 'Upcoming',
       'allEvents': 'All Events',
       'evtMeeting': 'Meeting',
       'evtAppointment': 'Medical Appointment',
@@ -628,21 +725,40 @@ class T {
       'evtReminder': 'Reminder',
       'evtPersonal': 'Personal',
       'evtOther': 'Other',
-      'selectDate': 'Select Date', 'selectTime': 'Select Time',
-      'calendarWidget': 'Calendar', 'eventsToday': 'Today\'s Events',
+      'selectDate': 'Select Date',
+      'selectTime': 'Select Time',
+      'calendarWidget': 'Calendar',
+      'eventsToday': 'Today\'s Events',
       'nextEvent': 'Next Event',
-      'mon': 'Mo', 'tue': 'Tu', 'wed': 'We', 'thu': 'Th', 'fri': 'Fr',
-      'sat': 'Sa', 'sun': 'Su',
-      'jan': 'January', 'feb': 'February', 'mar': 'March', 'apr': 'April',
-      'may': 'May', 'jun': 'June',
-      'jul': 'July', 'aug': 'August', 'sep': 'September', 'oct': 'October',
-      'nov': 'November', 'dec': 'December',
+      'mon': 'Mo',
+      'tue': 'Tu',
+      'wed': 'We',
+      'thu': 'Th',
+      'fri': 'Fr',
+      'sat': 'Sa',
+      'sun': 'Su',
+      'jan': 'January',
+      'feb': 'February',
+      'mar': 'March',
+      'apr': 'April',
+      'may': 'May',
+      'jun': 'June',
+      'jul': 'July',
+      'aug': 'August',
+      'sep': 'September',
+      'oct': 'October',
+      'nov': 'November',
+      'dec': 'December',
       'typeCalendar': 'Calendar Event',
       'deleteEventConfirmTitle': 'Confirm Delete',
       'deleteEventConfirmMsg': 'Delete this event? It will be moved to trash.',
       'deleteConfirmYes': 'Delete',
       'eventDone': 'Event completed',
       'markDone': 'Mark as done',
+      'addToCalendar': 'Add to Calendar',
+      'taskDeadlineDate': 'Calendar Date',
+      'taskDeadlineTime': 'Calendar Time',
+      'taskAddedToCalendar': 'Task added to calendar ✅',
     },
   };
 
@@ -651,10 +767,19 @@ class T {
     return _data[lang]?[key] ?? _data['ar']?[key] ?? key;
   }
 
-  static List<String> get quotes =>
-      [s('q1'), s('q2'), s('q3'), s('q4'), s('q5')];
-  static List<String> get categories =>
-      [s('cat1'), s('cat2'), s('cat3'), s('cat4')];
+  static List<String> get quotes => [
+    s('q1'),
+    s('q2'),
+    s('q3'),
+    s('q4'),
+    s('q5'),
+  ];
+  static List<String> get categories => [
+    s('cat1'),
+    s('cat2'),
+    s('cat3'),
+    s('cat4'),
+  ];
 }
 
 // ==========================================
@@ -678,8 +803,10 @@ void main() async {
 
   globalUserName = StorageService.loadUserName();
   globalLangNotifier.value = StorageService.loadLang();
-  globalThemeNotifier.value =
-  StorageService.loadTheme() == 'light' ? ThemeMode.light : ThemeMode.dark;
+  globalCurrencyNotifier.value = StorageService.loadCurrency();
+  globalThemeNotifier.value = StorageService.loadTheme() == 'light'
+      ? ThemeMode.light
+      : ThemeMode.dark;
 
   globalPracticalTasks.addAll(StorageService.loadTasks());
   globalExpenses.addAll(StorageService.loadExpenses());
@@ -690,10 +817,14 @@ void main() async {
 
   globalLangNotifier.addListener(() {
     StorageService.saveLang(globalLangNotifier.value);
+    globalCurrencyNotifier.addListener(() {
+      StorageService.saveCurrency(globalCurrencyNotifier.value);
+    });
   });
   globalThemeNotifier.addListener(() {
     StorageService.saveTheme(
-        globalThemeNotifier.value == ThemeMode.light ? 'light' : 'dark');
+      globalThemeNotifier.value == ThemeMode.light ? 'light' : 'dark',
+    );
   });
 
   runApp(const MyTasksApp());
@@ -804,47 +935,64 @@ class _DashboardScreenState extends State<DashboardScreen> {
         builder: (ctx, lang, _) => Directionality(
           textDirection: lang == 'ar' ? TextDirection.rtl : TextDirection.ltr,
           child: AlertDialog(
-            shape:
-            RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-            title: Text(T.s('welcome'),
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                    fontWeight: FontWeight.bold, color: Color(0xFF0284C7))),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+            ),
+            title: Text(
+              T.s('welcome'),
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF0284C7),
+              ),
+            ),
             content: SingleChildScrollView(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Container(
-                    padding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 4,
+                    ),
                     decoration: BoxDecoration(
                       color: Colors.grey.withOpacity(0.1),
                       borderRadius: BorderRadius.circular(15),
-                      border:
-                      Border.all(color: const Color(0xFF0284C7), width: 1),
+                      border: Border.all(
+                        color: const Color(0xFF0284C7),
+                        width: 1,
+                      ),
                     ),
                     child: DropdownButtonHideUnderline(
                       child: DropdownButton<String>(
                         value: lang,
                         isExpanded: true,
-                        icon: const Icon(Icons.language,
-                            color: Color(0xFF0284C7)),
+                        icon: const Icon(
+                          Icons.language,
+                          color: Color(0xFF0284C7),
+                        ),
                         items: const [
                           DropdownMenuItem(
-                              value: 'ar',
-                              child: Text('العربية 🇸🇦',
-                                  style:
-                                  TextStyle(fontWeight: FontWeight.bold))),
+                            value: 'ar',
+                            child: Text(
+                              'العربية 🇸🇦',
+                              style: TextStyle(fontWeight: FontWeight.bold),
+                            ),
+                          ),
                           DropdownMenuItem(
-                              value: 'en',
-                              child: Text('English 🇺🇸',
-                                  style:
-                                  TextStyle(fontWeight: FontWeight.bold))),
+                            value: 'en',
+                            child: Text(
+                              'English 🇺🇸',
+                              style: TextStyle(fontWeight: FontWeight.bold),
+                            ),
+                          ),
                           DropdownMenuItem(
-                              value: 'fr',
-                              child: Text('Français 🇫🇷',
-                                  style:
-                                  TextStyle(fontWeight: FontWeight.bold))),
+                            value: 'fr',
+                            child: Text(
+                              'Français 🇫🇷',
+                              style: TextStyle(fontWeight: FontWeight.bold),
+                            ),
+                          ),
                         ],
                         onChanged: (value) {
                           if (value != null) globalLangNotifier.value = value;
@@ -858,9 +1006,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     decoration: InputDecoration(
                       labelText: T.s('enterName'),
                       border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(15)),
-                      prefixIcon:
-                      const Icon(Icons.person, color: Color(0xFF0284C7)),
+                        borderRadius: BorderRadius.circular(15),
+                      ),
+                      prefixIcon: const Icon(
+                        Icons.person,
+                        color: Color(0xFF0284C7),
+                      ),
                     ),
                   ),
                 ],
@@ -871,7 +1022,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFF0284C7),
                   shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(15)),
+                    borderRadius: BorderRadius.circular(15),
+                  ),
                 ),
                 onPressed: () {
                   if (nameCtrl.text.trim().isNotEmpty) {
@@ -880,10 +1032,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     Navigator.pop(context);
                   }
                 },
-                child: Text(T.s('startUsing'),
-                    style: const TextStyle(
-                        color: Colors.white, fontWeight: FontWeight.bold)),
-              )
+                child: Text(
+                  T.s('startUsing'),
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
             ],
           ),
         ),
@@ -920,13 +1076,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
         key: _scaffoldKey,
         resizeToAvoidBottomInset: true,
         appBar: AppBar(
-          title: Text(_titles[_selectedIndex],
-              style:
-              const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+          title: Text(
+            _titles[_selectedIndex],
+            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+          ),
           centerTitle: true,
           elevation: 0,
-          backgroundColor:
-          isDark ? const Color(0xFF1E293B) : const Color(0xFF0284C7),
+          backgroundColor: isDark
+              ? const Color(0xFF1E293B)
+              : const Color(0xFF0284C7),
           actions: [
             if (_selectedIndex != 0)
               Tooltip(
@@ -935,28 +1093,39 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   onTap: () => setState(() => _selectedIndex = 0),
                   borderRadius: BorderRadius.circular(20),
                   child: Padding(
-                    padding:
-                    const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 6,
+                      vertical: 8,
+                    ),
                     child: Container(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 10, vertical: 4),
+                        horizontal: 10,
+                        vertical: 4,
+                      ),
                       decoration: BoxDecoration(
                         color: Colors.white.withOpacity(0.18),
                         borderRadius: BorderRadius.circular(20),
-                        border:
-                        Border.all(color: Colors.white.withOpacity(0.35)),
+                        border: Border.all(
+                          color: Colors.white.withOpacity(0.35),
+                        ),
                       ),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          const Icon(Icons.home_rounded,
-                              size: 15, color: Colors.white),
+                          const Icon(
+                            Icons.home_rounded,
+                            size: 15,
+                            color: Colors.white,
+                          ),
                           const SizedBox(width: 4),
-                          Text(T.s('goHome'),
-                              style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w700)),
+                          Text(
+                            T.s('goHome'),
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
                         ],
                       ),
                     ),
@@ -965,8 +1134,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ),
             IconButton(
               icon: Icon(isDark ? Icons.light_mode : Icons.dark_mode),
-              onPressed: () => globalThemeNotifier.value =
-              isDark ? ThemeMode.light : ThemeMode.dark,
+              onPressed: () => globalThemeNotifier.value = isDark
+                  ? ThemeMode.light
+                  : ThemeMode.dark,
             ),
           ],
         ),
@@ -978,12 +1148,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
             // Other (LTR): swipe right-to-left (negative velocity) opens drawer from left
             if (isArabic) {
               // RTL: drawer is on the right, open with swipe from right edge (velocity.x < 0 in screen coords)
-              if (details.primaryVelocity != null && details.primaryVelocity! < -200) {
+              if (details.primaryVelocity != null &&
+                  details.primaryVelocity! < -200) {
                 _scaffoldKey.currentState?.openDrawer();
               }
             } else {
               // LTR: drawer is on the left, open with swipe from left edge (velocity.x > 0)
-              if (details.primaryVelocity != null && details.primaryVelocity! > 200) {
+              if (details.primaryVelocity != null &&
+                  details.primaryVelocity! > 200) {
                 _scaffoldKey.currentState?.openDrawer();
               }
             }
@@ -992,36 +1164,47 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ),
         floatingActionButton: _selectedIndex >= 1 && _selectedIndex <= 4
             ? FloatingActionButton.small(
-          heroTag: 'trashFab',
-          backgroundColor: isDark ? const Color(0xFF1E293B) : Colors.white,
-          elevation: 3,
-          tooltip: T.s('trash'),
-          onPressed: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => Directionality(
-                  textDirection: globalLangNotifier.value == 'ar'
-                      ? TextDirection.rtl
-                      : TextDirection.ltr,
-                  child: Scaffold(
-                    appBar: AppBar(
-                      title: Text(T.s('trash'),
-                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-                      centerTitle: true,
-                      elevation: 0,
-                      backgroundColor: isDark ? const Color(0xFF1E293B) : const Color(0xFF0284C7),
+                heroTag: 'trashFab',
+                backgroundColor: isDark
+                    ? const Color(0xFF1E293B)
+                    : Colors.white,
+                elevation: 3,
+                tooltip: T.s('trash'),
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => Directionality(
+                        textDirection: globalLangNotifier.value == 'ar'
+                            ? TextDirection.rtl
+                            : TextDirection.ltr,
+                        child: Scaffold(
+                          appBar: AppBar(
+                            title: Text(
+                              T.s('trash'),
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 18,
+                              ),
+                            ),
+                            centerTitle: true,
+                            elevation: 0,
+                            backgroundColor: isDark
+                                ? const Color(0xFF1E293B)
+                                : const Color(0xFF0284C7),
+                          ),
+                          body: const TrashTab(),
+                        ),
+                      ),
                     ),
-                    body: const TrashTab(),
-                  ),
+                  );
+                },
+                child: Icon(
+                  Icons.delete_outline,
+                  size: 20,
+                  color: isDark ? Colors.redAccent.shade100 : Colors.redAccent,
                 ),
-              ),
-            );
-          },
-          child: Icon(Icons.delete_outline,
-              size: 20,
-              color: isDark ? Colors.redAccent.shade100 : Colors.redAccent),
-        )
+              )
             : null,
         floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
       ),
@@ -1030,8 +1213,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   Widget _buildDrawer(bool isDark) {
     return Drawer(
-      backgroundColor:
-      isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
+      backgroundColor: isDark
+          ? const Color(0xFF0F172A)
+          : const Color(0xFFF8FAFC),
       child: Column(
         children: [
           UserAccountsDrawerHeader(
@@ -1045,12 +1229,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
             accountName: Text(
               globalUserName.isEmpty ? T.s('helloUser') : globalUserName,
               style: const TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 18,
-                  color: Colors.white),
+                fontWeight: FontWeight.bold,
+                fontSize: 18,
+                color: Colors.white,
+              ),
             ),
-            accountEmail: Text(T.s('manage'),
-                style: const TextStyle(color: Colors.white70)),
+            accountEmail: Text(
+              T.s('manage'),
+              style: const TextStyle(color: Colors.white70),
+            ),
             currentAccountPicture: Container(
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
@@ -1061,7 +1248,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     color: Colors.black.withOpacity(0.2),
                     blurRadius: 8,
                     offset: const Offset(0, 3),
-                  )
+                  ),
                 ],
                 // التعديل الجديد: اللوغو الدائري بدلاً من الأيقونة السابقة
                 image: const DecorationImage(
@@ -1073,28 +1260,45 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
           _buildDrawerItem(0, T.s('homeWelcome'), Icons.dashboard, isDark),
           _buildDrawerItem(
-              1, T.s('calendarFull'), Icons.calendar_month, isDark),
+            1,
+            T.s('calendarFull'),
+            Icons.calendar_month,
+            isDark,
+          ),
           _buildDrawerItem(
-              2, T.s('practicalTasksFull'), Icons.business_center, isDark),
+            2,
+            T.s('practicalTasksFull'),
+            Icons.business_center,
+            isDark,
+          ),
           _buildDrawerItem(
-              3, T.s('walletFull'), Icons.account_balance_wallet, isDark),
+            3,
+            T.s('walletFull'),
+            Icons.account_balance_wallet,
+            isDark,
+          ),
           _buildDrawerItem(4, T.s('notesFull'), Icons.note_alt, isDark),
           const Divider(),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
             child: Row(
               children: [
-                Icon(Icons.language,
-                    size: 18,
-                    color: isDark
-                        ? const Color(0xFF6366F1)
-                        : const Color(0xFF0284C7)),
+                Icon(
+                  Icons.language,
+                  size: 18,
+                  color: isDark
+                      ? const Color(0xFF6366F1)
+                      : const Color(0xFF0284C7),
+                ),
                 const SizedBox(width: 8),
-                Text(T.s('language'),
-                    style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 13,
-                        color: isDark ? Colors.white70 : Colors.black54)),
+                Text(
+                  T.s('language'),
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 13,
+                    color: isDark ? Colors.white70 : Colors.black54,
+                  ),
+                ),
               ],
             ),
           ),
@@ -1122,17 +1326,23 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   Widget _buildDrawerItem(int index, String title, IconData icon, bool isDark) {
     final bool isSelected = _selectedIndex == index;
-    final Color activeColor =
-    isDark ? const Color(0xFF6366F1) : const Color(0xFF0284C7);
+    final Color activeColor = isDark
+        ? const Color(0xFF6366F1)
+        : const Color(0xFF0284C7);
     return ListTile(
-      leading: Icon(icon,
-          color: isSelected
-              ? activeColor
-              : (isDark ? Colors.white60 : Colors.black54)),
-      title: Text(title,
-          style: TextStyle(
-              fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-              color: isSelected ? activeColor : null)),
+      leading: Icon(
+        icon,
+        color: isSelected
+            ? activeColor
+            : (isDark ? Colors.white60 : Colors.black54),
+      ),
+      title: Text(
+        title,
+        style: TextStyle(
+          fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+          color: isSelected ? activeColor : null,
+        ),
+      ),
       selected: isSelected,
       onTap: () {
         _navigateToTab(index);
@@ -1141,11 +1351,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Widget _buildLangChip(String code, String symbol, String label,
-      String currentLang, bool isDark) {
+  Widget _buildLangChip(
+    String code,
+    String symbol,
+    String label,
+    String currentLang,
+    bool isDark,
+  ) {
     final bool isActive = currentLang == code;
-    final Color activeColor =
-    isDark ? const Color(0xFF6366F1) : const Color(0xFF0284C7);
+    final Color activeColor = isDark
+        ? const Color(0xFF6366F1)
+        : const Color(0xFF0284C7);
     return Expanded(
       child: GestureDetector(
         onTap: () {
@@ -1169,32 +1385,39 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ),
             boxShadow: isActive
                 ? [
-              BoxShadow(
-                  color: activeColor.withOpacity(0.3),
-                  blurRadius: 8,
-                  offset: const Offset(0, 3))
-            ]
+                    BoxShadow(
+                      color: activeColor.withOpacity(0.3),
+                      blurRadius: 8,
+                      offset: const Offset(0, 3),
+                    ),
+                  ]
                 : null,
           ),
           child: Column(
             children: [
-              Text(symbol,
-                  style: TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w900,
-                      color: isActive
-                          ? Colors.white
-                          : (isDark ? Colors.white60 : Colors.black54))),
+              Text(
+                symbol,
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w900,
+                  color: isActive
+                      ? Colors.white
+                      : (isDark ? Colors.white60 : Colors.black54),
+                ),
+              ),
               const SizedBox(height: 2),
-              Text(label,
-                  style: TextStyle(
-                      fontSize: 8,
-                      fontWeight: FontWeight.w600,
-                      color: isActive
-                          ? Colors.white70
-                          : (isDark ? Colors.white38 : Colors.black38)),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 8,
+                  fontWeight: FontWeight.w600,
+                  color: isActive
+                      ? Colors.white70
+                      : (isDark ? Colors.white38 : Colors.black38),
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
             ],
           ),
         ),
@@ -1259,10 +1482,12 @@ class _WelcomeTabState extends State<WelcomeTab> {
       decoration: isDark
           ? const BoxDecoration(color: Color(0xFF0F172A))
           : const BoxDecoration(
-          gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [Color(0xFFEEF2FF), Color(0xFFF8FAFC)])),
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [Color(0xFFEEF2FF), Color(0xFFF8FAFC)],
+              ),
+            ),
       child: Column(
         children: [
           Expanded(
@@ -1287,9 +1512,10 @@ class _WelcomeTabState extends State<WelcomeTab> {
                         ? T.s('helloUser')
                         : '${T.s('helloUserName')} $globalUserName',
                     style: TextStyle(
-                        fontSize: 26,
-                        fontWeight: FontWeight.bold,
-                        color: isDark ? Colors.white : const Color(0xFF1E293B)),
+                      fontSize: 26,
+                      fontWeight: FontWeight.bold,
+                      color: isDark ? Colors.white : const Color(0xFF1E293B),
+                    ),
                     textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 24),
@@ -1302,27 +1528,34 @@ class _WelcomeTabState extends State<WelcomeTab> {
                           : const Color(0xFF0284C7).withOpacity(0.05),
                       borderRadius: BorderRadius.circular(16),
                       border: Border.all(
-                          color: isDark
-                              ? Colors.white.withOpacity(0.1)
-                              : const Color(0xFF0284C7).withOpacity(0.2)),
+                        color: isDark
+                            ? Colors.white.withOpacity(0.1)
+                            : const Color(0xFF0284C7).withOpacity(0.2),
+                      ),
                     ),
                     child: Column(
                       children: [
-                        Text(T.s('todayWisdom'),
-                            style: TextStyle(
-                                fontSize: 12,
-                                color: isDark
-                                    ? const Color(0xFF38BDF8)
-                                    : const Color(0xFF0284C7),
-                                fontWeight: FontWeight.bold)),
+                        Text(
+                          T.s('todayWisdom'),
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: isDark
+                                ? const Color(0xFF38BDF8)
+                                : const Color(0xFF0284C7),
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
                         const SizedBox(height: 8),
-                        Text('"$selectedQuote"',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                                fontSize: 14,
-                                color: isDark ? Colors.white70 : Colors.black87,
-                                fontStyle: FontStyle.italic,
-                                height: 1.5)),
+                        Text(
+                          '"$selectedQuote"',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: isDark ? Colors.white70 : Colors.black87,
+                            fontStyle: FontStyle.italic,
+                            height: 1.5,
+                          ),
+                        ),
                       ],
                     ),
                   ),
@@ -1330,50 +1563,60 @@ class _WelcomeTabState extends State<WelcomeTab> {
                   Row(
                     children: [
                       Expanded(
-                          child: GestureDetector(
-                              onTap: () => widget.onNavigate(1),
-                              child: _buildStatCard(
-                                  T.s('calendarWidget'),
-                                  '${globalCalendarEvents.where((e) {
-                                    final d = e['date'] as DateTime;
-                                    final now = DateTime.now();
-                                    return d.year == now.year &&
-                                        d.month == now.month &&
-                                        d.day == now.day;
-                                  }).length}',
-                                  Icons.calendar_month,
-                                  const Color(0xFF6366F1),
-                                  isDark))),
+                        child: GestureDetector(
+                          onTap: () => widget.onNavigate(1),
+                          child: _buildStatCard(
+                            T.s('calendarWidget'),
+                            '${globalCalendarEvents.where((e) {
+                              final d = e['date'] as DateTime;
+                              final now = DateTime.now();
+                              return d.year == now.year && d.month == now.month && d.day == now.day;
+                            }).length}',
+                            Icons.calendar_month,
+                            const Color(0xFF6366F1),
+                            isDark,
+                          ),
+                        ),
+                      ),
                       const SizedBox(width: 8),
                       Expanded(
-                          child: GestureDetector(
-                              onTap: () => widget.onNavigate(2),
-                              child: _buildStatCard(
-                                  T.s('practicalTasksCount'),
-                                  '${globalPracticalTasks.length}',
-                                  Icons.business_center,
-                                  const Color(0xFF0284C7),
-                                  isDark))),
+                        child: GestureDetector(
+                          onTap: () => widget.onNavigate(2),
+                          child: _buildStatCard(
+                            T.s('practicalTasksCount'),
+                            '${globalPracticalTasks.length}',
+                            Icons.business_center,
+                            const Color(0xFF0284C7),
+                            isDark,
+                          ),
+                        ),
+                      ),
                       const SizedBox(width: 8),
                       Expanded(
-                          child: GestureDetector(
-                              onTap: () => widget.onNavigate(3),
-                              child: _buildStatCard(
-                                  T.s('financialSummary'),
-                                  '${netTotal.toStringAsFixed(0)}',
-                                  Icons.account_balance_wallet,
-                                  const Color(0xFFF43F5E),
-                                  isDark))),
+                        child: GestureDetector(
+                          onTap: () => widget.onNavigate(3),
+                          child: _buildStatCard(
+                            T.s('financialSummary'),
+                            '${netTotal.toStringAsFixed(0)}',
+                            Icons.account_balance_wallet,
+                            const Color(0xFFF43F5E),
+                            isDark,
+                          ),
+                        ),
+                      ),
                       const SizedBox(width: 8),
                       Expanded(
-                          child: GestureDetector(
-                              onTap: () => widget.onNavigate(4),
-                              child: _buildStatCard(
-                                  T.s('notesCount'),
-                                  '${globalNotes.length}',
-                                  Icons.note_alt,
-                                  const Color(0xFF10B981),
-                                  isDark))),
+                        child: GestureDetector(
+                          onTap: () => widget.onNavigate(4),
+                          child: _buildStatCard(
+                            T.s('notesCount'),
+                            '${globalNotes.length}',
+                            Icons.note_alt,
+                            const Color(0xFF10B981),
+                            isDark,
+                          ),
+                        ),
+                      ),
                     ],
                   ),
                 ],
@@ -1399,7 +1642,12 @@ class _WelcomeTabState extends State<WelcomeTab> {
   }
 
   Widget _buildStatCard(
-      String title, String value, IconData icon, Color color, bool isDark) {
+    String title,
+    String value,
+    IconData icon,
+    Color color,
+    bool isDark,
+  ) {
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 4),
       decoration: BoxDecoration(
@@ -1409,34 +1657,42 @@ class _WelcomeTabState extends State<WelcomeTab> {
         boxShadow: isDark
             ? null
             : [
-          BoxShadow(
-              color: Colors.black.withOpacity(0.03),
-              blurRadius: 10,
-              offset: const Offset(0, 4))
-        ],
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.03),
+                  blurRadius: 10,
+                  offset: const Offset(0, 4),
+                ),
+              ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           CircleAvatar(
-              backgroundColor: color.withOpacity(0.1),
-              radius: 16,
-              child: Icon(icon, color: color, size: 16)),
+            backgroundColor: color.withOpacity(0.1),
+            radius: 16,
+            child: Icon(icon, color: color, size: 16),
+          ),
           const SizedBox(height: 8),
-          Text(value,
-              style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                  color: isDark ? Colors.white : const Color(0xFF1E293B)),
-              textAlign: TextAlign.center,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              color: isDark ? Colors.white : const Color(0xFF1E293B),
+            ),
+            textAlign: TextAlign.center,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
           const SizedBox(height: 4),
-          Text(title,
-              style: TextStyle(
-                  fontSize: 10,
-                  color: isDark ? Colors.white60 : const Color(0xFF64748B)),
-              textAlign: TextAlign.center),
+          Text(
+            title,
+            style: TextStyle(
+              fontSize: 10,
+              color: isDark ? Colors.white60 : const Color(0xFF64748B),
+            ),
+            textAlign: TextAlign.center,
+          ),
         ],
       ),
     );
@@ -1490,7 +1746,7 @@ class _PracticalTasksTabState extends State<PracticalTasksTab> {
     return {
       'text': '${T.s('remaining')} $text',
       'isUrgent': difference.inMinutes <= 60,
-      'expired': false
+      'expired': false,
     };
   }
 
@@ -1499,6 +1755,22 @@ class _PracticalTasksTabState extends State<PracticalTasksTab> {
     final descCtrl = TextEditingController(text: existingTask?['desc'] ?? '');
     int durationValue = 1;
     String durationType = T.s('hour');
+
+    // --- جديد: متغيرات الدمج مع التقويم ---
+    DateTime? calendarDate;
+    TimeOfDay? calendarTime;
+    bool addToCalendar = false;
+
+    if (existingTask != null) {
+      if (existingTask['calendarDate'] != null) {
+        calendarDate = existingTask['calendarDate'] as DateTime;
+        addToCalendar = true;
+      }
+      if (existingTask['calendarTime'] != null) {
+        calendarTime = existingTask['calendarTime'] as TimeOfDay;
+      }
+    }
+
     showDialog(
       context: context,
       builder: (context) => StatefulBuilder(
@@ -1507,32 +1779,38 @@ class _PracticalTasksTabState extends State<PracticalTasksTab> {
               ? TextDirection.rtl
               : TextDirection.ltr,
           child: AlertDialog(
-            shape:
-            RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
             title: Text(
-                existingTask == null
-                    ? T.s('addTaskTitle')
-                    : T.s('editTaskTitle'),
-                style:
-                const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+              existingTask == null ? T.s('addTaskTitle') : T.s('editTaskTitle'),
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+            ),
             content: SingleChildScrollView(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   TextField(
-                      controller: titleCtrl,
-                      decoration: InputDecoration(labelText: T.s('taskName'))),
+                    controller: titleCtrl,
+                    decoration: InputDecoration(labelText: T.s('taskName')),
+                  ),
                   TextField(
-                      controller: descCtrl,
-                      decoration: InputDecoration(labelText: T.s('taskDesc'))),
+                    controller: descCtrl,
+                    decoration: InputDecoration(labelText: T.s('taskDesc')),
+                  ),
                   const SizedBox(height: 16),
                   Align(
-                      alignment: globalLangNotifier.value == 'ar'
-                          ? Alignment.centerRight
-                          : Alignment.centerLeft,
-                      child: Text(T.s('duration'),
-                          style: const TextStyle(
-                              fontSize: 12, fontWeight: FontWeight.bold))),
+                    alignment: globalLangNotifier.value == 'ar'
+                        ? Alignment.centerRight
+                        : Alignment.centerLeft,
+                    child: Text(
+                      T.s('duration'),
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
                   Row(
                     children: [
                       Expanded(
@@ -1540,8 +1818,12 @@ class _PracticalTasksTabState extends State<PracticalTasksTab> {
                           value: durationValue,
                           isExpanded: true,
                           items: List.generate(30, (i) => i + 1)
-                              .map((val) => DropdownMenuItem(
-                              value: val, child: Text('$val')))
+                              .map(
+                                (val) => DropdownMenuItem(
+                                  value: val,
+                                  child: Text('$val'),
+                                ),
+                              )
                               .toList(),
                           onChanged: (val) =>
                               setDialogState(() => durationValue = val ?? 1),
@@ -1553,22 +1835,166 @@ class _PracticalTasksTabState extends State<PracticalTasksTab> {
                           value: durationType,
                           isExpanded: true,
                           items: [T.s('hour'), T.s('day')]
-                              .map((val) => DropdownMenuItem(
-                              value: val, child: Text(val)))
+                              .map(
+                                (val) => DropdownMenuItem(
+                                  value: val,
+                                  child: Text(val),
+                                ),
+                              )
                               .toList(),
                           onChanged: (val) => setDialogState(
-                                  () => durationType = val ?? T.s('hour')),
+                            () => durationType = val ?? T.s('hour'),
+                          ),
                         ),
                       ),
                     ],
                   ),
+
+                  // ─── قسم الدمج مع التقويم (جديد) ───
+                  const SizedBox(height: 12),
+                  const Divider(),
+                  Row(
+                    children: [
+                      Switch(
+                        value: addToCalendar,
+                        activeColor: const Color(0xFF6366F1),
+                        onChanged: (val) => setDialogState(() {
+                          addToCalendar = val;
+                          if (!val) {
+                            calendarDate = null;
+                            calendarTime = null;
+                          }
+                        }),
+                      ),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          T.s('addToCalendar'),
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ),
+                      const Icon(
+                        Icons.calendar_month,
+                        color: Color(0xFF6366F1),
+                        size: 18,
+                      ),
+                    ],
+                  ),
+                  if (addToCalendar) ...[
+                    const SizedBox(height: 8),
+                    // زر اختيار التاريخ
+                    InkWell(
+                      onTap: () async {
+                        final picked = await showDatePicker(
+                          context: context,
+                          initialDate: calendarDate ?? DateTime.now(),
+                          firstDate: DateTime.now().subtract(
+                            const Duration(days: 1),
+                          ),
+                          lastDate: DateTime.now().add(
+                            const Duration(days: 365 * 5),
+                          ),
+                        );
+                        if (picked != null) {
+                          setDialogState(() => calendarDate = picked);
+                        }
+                      },
+                      child: Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 10,
+                        ),
+                        decoration: BoxDecoration(
+                          border: Border.all(
+                            color: const Color(0xFF6366F1).withOpacity(0.5),
+                          ),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(
+                              Icons.calendar_today,
+                              size: 16,
+                              color: Color(0xFF6366F1),
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              calendarDate != null
+                                  ? '${calendarDate!.day}/${calendarDate!.month}/${calendarDate!.year}'
+                                  : T.s('taskDeadlineDate'),
+                              style: TextStyle(
+                                color: calendarDate != null
+                                    ? null
+                                    : Colors.grey,
+                                fontSize: 13,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    // زر اختيار الوقت
+                    InkWell(
+                      onTap: () async {
+                        final picked = await showTimePicker(
+                          context: context,
+                          initialTime: calendarTime ??
+                              const TimeOfDay(hour: 9, minute: 0),
+                        );
+                        if (picked != null) {
+                          setDialogState(() => calendarTime = picked);
+                        }
+                      },
+                      child: Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 10,
+                        ),
+                        decoration: BoxDecoration(
+                          border: Border.all(
+                            color: const Color(0xFF6366F1).withOpacity(0.5),
+                          ),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(
+                              Icons.access_time,
+                              size: 16,
+                              color: Color(0xFF6366F1),
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              calendarTime != null
+                                  ? '${calendarTime!.hour.toString().padLeft(2, '0')}:${calendarTime!.minute.toString().padLeft(2, '0')}'
+                                  : T.s('taskDeadlineTime'),
+                              style: TextStyle(
+                                color: calendarTime != null
+                                    ? null
+                                    : Colors.grey,
+                                fontSize: 13,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                  // ─── نهاية قسم التقويم ───
                 ],
               ),
             ),
             actions: [
               TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: Text(T.s('cancel'))),
+                onPressed: () => Navigator.pop(context),
+                child: Text(T.s('cancel')),
+              ),
               ElevatedButton(
                 style: ElevatedButton.styleFrom(backgroundColor: navyBlue),
                 onPressed: () {
@@ -1583,7 +2009,11 @@ class _PracticalTasksTabState extends State<PracticalTasksTab> {
                       'desc': descCtrl.text,
                       'deadline': deadline,
                       'dateTime':
-                      existingTask?['dateTime'] ?? getCurrentFormattedDate()
+                          existingTask?['dateTime'] ??
+                          getCurrentFormattedDate(),
+                      // --- جديد: حفظ بيانات التقويم ---
+                      'calendarDate': addToCalendar ? calendarDate : null,
+                      'calendarTime': addToCalendar ? calendarTime : null,
                     };
                     if (index == null)
                       globalPracticalTasks.add(taskData);
@@ -1591,10 +2021,55 @@ class _PracticalTasksTabState extends State<PracticalTasksTab> {
                       globalPracticalTasks[index] = taskData;
                   });
                   StorageService.saveTasks(globalPracticalTasks);
+
+                  // --- جديد: إضافة حدث للتقويم تلقائياً ---
+                  if (addToCalendar && calendarDate != null) {
+                    final eventTime =
+                        calendarTime ?? const TimeOfDay(hour: 9, minute: 0);
+
+                    // حذف الحدث القديم إذا كان تعديلاً
+                    if (index != null) {
+                      globalCalendarEvents.removeWhere(
+                        (e) =>
+                            e['sourceTaskTitle'] ==
+                                existingTask?['title'] &&
+                            e['isFromTask'] == true,
+                      );
+                    }
+
+                    globalCalendarEvents.add({
+                      'id': DateTime.now().millisecondsSinceEpoch,
+                      'title': titleCtrl.text,
+                      'desc': descCtrl.text,
+                      'date': calendarDate!,
+                      'time': eventTime,
+                      'type': 'task',
+                      'done': false,
+                      'isDone': false,
+                      'isFromTask': true,
+                      'sourceTaskTitle': titleCtrl.text,
+                    });
+                    StorageService.saveCalendarEvents(globalCalendarEvents);
+
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(T.s('taskAddedToCalendar')),
+                        backgroundColor: const Color(0xFF10B981),
+                        duration: const Duration(seconds: 2),
+                        behavior: SnackBarBehavior.floating,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                      ),
+                    );
+                  }
+
                   Navigator.pop(context);
                 },
-                child: Text(existingTask == null ? T.s('add') : T.s('save'),
-                    style: const TextStyle(color: Colors.white)),
+                child: Text(
+                  existingTask == null ? T.s('add') : T.s('save'),
+                  style: const TextStyle(color: Colors.white),
+                ),
               ),
             ],
           ),
@@ -1612,15 +2087,21 @@ class _PracticalTasksTabState extends State<PracticalTasksTab> {
         children: [
           ElevatedButton.icon(
             style: ElevatedButton.styleFrom(
-                backgroundColor: navyBlue,
-                minimumSize: const Size(double.infinity, 50),
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12)),
-                elevation: isDark ? 0 : 3),
+              backgroundColor: navyBlue,
+              minimumSize: const Size(double.infinity, 50),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              elevation: isDark ? 0 : 3,
+            ),
             icon: const Icon(Icons.add_task, color: Colors.white),
-            label: Text(T.s('addTask'),
-                style: const TextStyle(
-                    color: Colors.white, fontWeight: FontWeight.bold)),
+            label: Text(
+              T.s('addTask'),
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
             onPressed: () => _openAddTaskDialog(),
           ),
           const SizedBox(height: 16),
@@ -1628,113 +2109,185 @@ class _PracticalTasksTabState extends State<PracticalTasksTab> {
             child: globalPracticalTasks.isEmpty
                 ? Center(child: Text(T.s('noTasks')))
                 : ListView.builder(
-              itemCount: globalPracticalTasks.length,
-              itemBuilder: (context, index) {
-                final task = globalPracticalTasks[index];
-                final DateTime deadline = task['deadline'];
-                final timeInfo = _calculateRemainingTime(deadline);
-                bool isUrgent = timeInfo['isUrgent'];
+                    itemCount: globalPracticalTasks.length,
+                    itemBuilder: (context, index) {
+                      final task = globalPracticalTasks[index];
+                      final DateTime deadline = task['deadline'];
+                      final timeInfo = _calculateRemainingTime(deadline);
+                      bool isUrgent = timeInfo['isUrgent'];
 
-                return Container(
-                  margin: const EdgeInsets.only(bottom: 12),
-                  decoration: BoxDecoration(
-                    color:
-                    isDark ? const Color(0xFF1E293B) : Colors.white,
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(
-                        color: isUrgent
-                            ? Colors.red.shade400
-                            : (isDark
-                            ? Colors.white12
-                            : navyBlue.withOpacity(0.2)),
-                        width: isUrgent ? 2 : 1),
-                    boxShadow: isDark
-                        ? null
-                        : [
-                      BoxShadow(
-                          color: isUrgent
-                              ? Colors.red.withOpacity(0.05)
-                              : navyBlue.withOpacity(0.05),
-                          blurRadius: 10,
-                          offset: const Offset(0, 4))
-                    ],
-                  ),
-                  child: ListTile(
-                    contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 16, vertical: 8),
-                    title: Text(task['title'],
-                        style:
-                        const TextStyle(fontWeight: FontWeight.bold)),
-                    subtitle: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        if (task['desc'].toString().isNotEmpty) ...[
-                          const SizedBox(height: 4),
-                          Text(task['desc'],
-                              style: TextStyle(
-                                  color: isDark
-                                      ? Colors.white70
-                                      : const Color(0xFF64748B))),
-                        ],
-                        const SizedBox(height: 8),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 10, vertical: 4),
-                          decoration: BoxDecoration(
-                              color: isUrgent
-                                  ? Colors.red.shade50
-                                  : (isDark
-                                  ? Colors.white10
-                                  : const Color(0xFFF1F5F9)),
-                              borderRadius: BorderRadius.circular(8)),
-                          child: Row(
+                      return Container(
+                        margin: const EdgeInsets.only(bottom: 12),
+                        decoration: BoxDecoration(
+                          color: isDark
+                              ? const Color(0xFF1E293B)
+                              : Colors.white,
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(
+                            color: isUrgent
+                                ? Colors.red.shade400
+                                : (isDark
+                                      ? Colors.white12
+                                      : navyBlue.withOpacity(0.2)),
+                            width: isUrgent ? 2 : 1,
+                          ),
+                          boxShadow: isDark
+                              ? null
+                              : [
+                                  BoxShadow(
+                                    color: isUrgent
+                                        ? Colors.red.withOpacity(0.05)
+                                        : navyBlue.withOpacity(0.05),
+                                    blurRadius: 10,
+                                    offset: const Offset(0, 4),
+                                  ),
+                                ],
+                        ),
+                        child: ListTile(
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 8,
+                          ),
+                          title: Text(
+                            task['title'],
+                            style: const TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                          subtitle: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              if (task['desc'].toString().isNotEmpty) ...[
+                                const SizedBox(height: 4),
+                                Text(
+                                  task['desc'],
+                                  style: TextStyle(
+                                    color: isDark
+                                        ? Colors.white70
+                                        : const Color(0xFF64748B),
+                                  ),
+                                ),
+                              ],
+                              const SizedBox(height: 8),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 10,
+                                  vertical: 4,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: isUrgent
+                                      ? Colors.red.shade50
+                                      : (isDark
+                                            ? Colors.white10
+                                            : const Color(0xFFF1F5F9)),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      Icons.access_time_filled,
+                                      size: 14,
+                                      color: isUrgent ? Colors.red : navyBlue,
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Text(
+                                      timeInfo['text'],
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.bold,
+                                        color: isUrgent
+                                            ? Colors.red
+                                            : (isDark
+                                                  ? Colors.white70
+                                                  : navyBlue),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              // --- جديد: شارة التقويم ---
+                              if (task['calendarDate'] != null) ...[
+                                const SizedBox(height: 4),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 3,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFF6366F1).withOpacity(
+                                      0.12,
+                                    ),
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      const Icon(
+                                        Icons.event_available,
+                                        size: 13,
+                                        color: Color(0xFF6366F1),
+                                      ),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        () {
+                                          final d = task['calendarDate']
+                                              as DateTime;
+                                          final t = task['calendarTime']
+                                              as TimeOfDay?;
+                                          String dateStr =
+                                              '${d.day}/${d.month}/${d.year}';
+                                          if (t != null) {
+                                            dateStr +=
+                                                '  ${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
+                                          }
+                                          return dateStr;
+                                        }(),
+                                        style: const TextStyle(
+                                          fontSize: 11,
+                                          color: Color(0xFF6366F1),
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                          trailing: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Icon(Icons.access_time_filled,
-                                  size: 14,
-                                  color:
-                                  isUrgent ? Colors.red : navyBlue),
-                              const SizedBox(width: 6),
-                              Text(timeInfo['text'],
-                                  style: TextStyle(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.bold,
-                                      color: isUrgent
-                                          ? Colors.red
-                                          : (isDark
-                                          ? Colors.white70
-                                          : navyBlue))),
+                              IconButton(
+                                icon: Icon(Icons.edit, color: navyBlue),
+                                onPressed: () => _openAddTaskDialog(
+                                  existingTask: task,
+                                  index: index,
+                                ),
+                              ),
+                              IconButton(
+                                icon: const Icon(
+                                  Icons.delete_outline,
+                                  color: Colors.redAccent,
+                                ),
+                                onPressed: () => setState(() {
+                                  globalTrash.add({
+                                    'type': T.s('typeTask'),
+                                    'title': task['title'],
+                                    'data': globalPracticalTasks.removeAt(
+                                      index,
+                                    ),
+                                  });
+                                  StorageService.saveTasks(
+                                    globalPracticalTasks,
+                                  );
+                                  StorageService.saveTrash(globalTrash);
+                                }),
+                              ),
                             ],
                           ),
                         ),
-                      ],
-                    ),
-                    trailing: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        IconButton(
-                            icon: Icon(Icons.edit, color: navyBlue),
-                            onPressed: () => _openAddTaskDialog(
-                                existingTask: task, index: index)),
-                        IconButton(
-                          icon: const Icon(Icons.delete_outline,
-                              color: Colors.redAccent),
-                          onPressed: () => setState(() {
-                            globalTrash.add({
-                              'type': T.s('typeTask'),
-                              'title': task['title'],
-                              'data': globalPracticalTasks.removeAt(index)
-                            });
-                            StorageService.saveTasks(globalPracticalTasks);
-                            StorageService.saveTrash(globalTrash);
-                          }),
-                        ),
-                      ],
-                    ),
+                      );
+                    },
                   ),
-                );
-              },
-            ),
           ),
         ],
       ),
@@ -1775,10 +2328,11 @@ class _FinancesTabState extends State<FinancesTab> {
           Container(
             margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             decoration: BoxDecoration(
-                color: Theme.of(context).brightness == Brightness.dark
-                    ? const Color(0xFF1E293B)
-                    : Colors.black.withOpacity(0.05),
-                borderRadius: BorderRadius.circular(12)),
+              color: Theme.of(context).brightness == Brightness.dark
+                  ? const Color(0xFF1E293B)
+                  : Colors.black.withOpacity(0.05),
+              borderRadius: BorderRadius.circular(12),
+            ),
             child: TabBar(
               indicatorColor: const Color(0xFF0284C7),
               labelColor: const Color(0xFF0284C7),
@@ -1786,18 +2340,22 @@ class _FinancesTabState extends State<FinancesTab> {
               indicatorSize: TabBarIndicatorSize.tab,
               tabs: [
                 Tab(text: T.s('walletLog')),
-                Tab(text: T.s('debtsManage'))
+                Tab(text: T.s('debtsManage')),
               ],
             ),
           ),
           const Expanded(
-              child: TabBarView(children: [WalletView(), DebtsView()])),
+            child: TabBarView(children: [WalletView(), DebtsView()]),
+          ),
         ],
       ),
     );
   }
 }
 
+// ==========================================
+// 3.1 شاشة المحفظة (WalletView)
+// ==========================================
 class WalletView extends StatefulWidget {
   const WalletView({Key? key}) : super(key: key);
   @override
@@ -1831,7 +2389,8 @@ class _WalletViewState extends State<WalletView> {
 
   void _addTransaction() {
     if (_titleController.text.trim().isEmpty ||
-        _amountController.text.trim().isEmpty) return;
+        _amountController.text.trim().isEmpty)
+      return;
     double? amount = double.tryParse(_amountController.text.trim());
     if (amount == null) return;
     setState(() {
@@ -1839,8 +2398,9 @@ class _WalletViewState extends State<WalletView> {
         int di = globalDebts.indexWhere((d) => d['id'] == _selectedDebtId);
         if (di != -1) {
           globalDebts[di]['paid'] += amount;
-          ScaffoldMessenger.of(context)
-              .showSnackBar(SnackBar(content: Text(T.s('installmentPaid'))));
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text(T.s('installmentPaid'))));
         }
       }
       globalExpenses.insert(0, {
@@ -1857,14 +2417,14 @@ class _WalletViewState extends State<WalletView> {
     });
     StorageService.saveExpenses(globalExpenses);
     StorageService.saveDebts(globalDebts);
-    // إخفاء الكيبورد بعد الإضافة
     FocusScope.of(context).unfocus();
   }
 
   void _editTransaction(Map<String, dynamic> item, int index) {
     final editTitleCtrl = TextEditingController(text: item['title']);
-    final editAmountCtrl =
-    TextEditingController(text: item['amount'].toString());
+    final editAmountCtrl = TextEditingController(
+      text: item['amount'].toString(),
+    );
     String editCategory = _selectedCategory;
 
     showDialog(
@@ -1889,21 +2449,24 @@ class _WalletViewState extends State<WalletView> {
                     onChanged: (val) => setDS(() => editCategory = val!),
                   ),
                   TextField(
-                      controller: editTitleCtrl,
-                      decoration:
-                      InputDecoration(labelText: T.s('statementLabel'))),
+                    controller: editTitleCtrl,
+                    decoration: InputDecoration(
+                      labelText: T.s('statementLabel'),
+                    ),
+                  ),
                   TextField(
-                      controller: editAmountCtrl,
-                      keyboardType: TextInputType.number,
-                      decoration:
-                      InputDecoration(labelText: T.s('amountLabel'))),
+                    controller: editAmountCtrl,
+                    keyboardType: TextInputType.number,
+                    decoration: InputDecoration(labelText: T.s('amountLabel')),
+                  ),
                 ],
               ),
             ),
             actions: [
               TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: Text(T.s('cancel'))),
+                onPressed: () => Navigator.pop(context),
+                child: Text(T.s('cancel')),
+              ),
               ElevatedButton(
                 onPressed: () {
                   setState(() {
@@ -1938,246 +2501,411 @@ class _WalletViewState extends State<WalletView> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     const mainColor = Color(0xFF0284C7);
 
-    // استخدام CustomScrollView لمنع مشكلة خطأ Overflow عند فتح لوحة المفاتيح
-    return GestureDetector(
-      onTap: () => FocusScope.of(context).unfocus(),
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: CustomScrollView(
-          slivers: [
-            SliverToBoxAdapter(
-              child: Column(
-                children: [
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                        gradient: LinearGradient(
+    return ValueListenableBuilder<String>(
+      valueListenable: globalCurrencyNotifier,
+      builder: (context, currentCurrency, _) {
+        return GestureDetector(
+          onTap: () => FocusScope.of(context).unfocus(),
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: CustomScrollView(
+              slivers: [
+                SliverToBoxAdapter(
+                  child: Column(
+                    children: [
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
                             colors: isDark
-                                ? [const Color(0xFF0F172A), mainColor.withOpacity(0.25)]
-                                : [Colors.white, mainColor.withOpacity(0.15)]),
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: mainColor.withOpacity(0.3))),
-                    child: Column(
-                      children: [
-                        Text(T.s('netBalance'),
-                            style: TextStyle(
-                                color: isDark ? Colors.white70 : Colors.black87,
-                                fontSize: 13,
-                                fontWeight: FontWeight.bold)),
-                        const SizedBox(height: 4),
-                        Text('${netBalance.toStringAsFixed(2)} ${T.s('currency')}',
-                            style: TextStyle(
-                                color:
-                                netBalance >= 0 ? Colors.green : Colors.redAccent,
-                                fontSize: 24,
-                                fontWeight: FontWeight.bold)),
-                        const Divider(height: 20, color: Colors.black12),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceAround,
-                          children: [
-                            Column(children: [
-                              Text(T.s('credit'),
-                                  style: const TextStyle(
-                                      color: Colors.grey, fontSize: 12)),
-                              Text('+${totalCredit.toStringAsFixed(1)}',
-                                  style: const TextStyle(
-                                      color: Colors.green,
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 14))
-                            ]),
-                            Column(children: [
-                              Text(T.s('debit'),
-                                  style: const TextStyle(
-                                      color: Colors.grey, fontSize: 12)),
-                              Text('-${totalDebit.toStringAsFixed(1)}',
-                                  style: const TextStyle(
-                                      color: Colors.redAccent,
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 14))
-                            ]),
-                          ],
+                                ? [
+                                    const Color(0xFF0F172A),
+                                    mainColor.withOpacity(0.25),
+                                  ]
+                                : [Colors.white, mainColor.withOpacity(0.15)],
+                          ),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: mainColor.withOpacity(0.3)),
                         ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                        color: isDark
-                            ? const Color(0xFF1E293B)
-                            : Colors.black.withOpacity(0.03),
-                        borderRadius: BorderRadius.circular(14)),
-                    child: Column(
-                      children: [
-                        Row(
+                        child: Column(
                           children: [
-                            Text(T.s('type'),
-                                style: const TextStyle(
-                                    fontSize: 12, fontWeight: FontWeight.bold)),
-                            Expanded(
-                              child: DropdownButton<String>(
-                                value: _selectedCategory,
-                                isExpanded: true,
-                                underline: const SizedBox(),
-                                dropdownColor: Theme.of(context).cardColor,
-                                items: T.categories
-                                    .map((c) => DropdownMenuItem(
-                                    value: c,
-                                    child: Text(c,
-                                        style: const TextStyle(fontSize: 12))))
-                                    .toList(),
-                                onChanged: (val) => setState(() {
-                                  _selectedCategory = val!;
-                                  if (_selectedCategory != T.s('cat3'))
-                                    _selectedDebtId = null;
-                                }),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text(
+                                  T.s('netBalance'),
+                                  style: TextStyle(
+                                    color: isDark
+                                        ? Colors.white70
+                                        : Colors.black87,
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                // --- محدد العملة ---
+                                Container(
+                                  height: 32,
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: isDark
+                                        ? Colors.white12
+                                        : Colors.white54,
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: DropdownButtonHideUnderline(
+                                    child: DropdownButton<String>(
+                                      value: currentCurrency,
+                                      icon: Icon(
+                                        Icons.keyboard_arrow_down,
+                                        size: 18,
+                                        color: isDark
+                                            ? Colors.white70
+                                            : mainColor,
+                                      ),
+                                      style: TextStyle(
+                                        fontSize: 13,
+                                        color: isDark
+                                            ? Colors.white
+                                            : Colors.black,
+                                        fontWeight: FontWeight.bold,
+                                        fontFamily: 'Cairo',
+                                      ),
+                                      dropdownColor: Theme.of(
+                                        context,
+                                      ).cardColor,
+                                      items:
+                                          [
+                                                '🇸🇦 SAR',
+                                                '🇺🇸 USD',
+                                                '🇪🇺 EUR',
+                                                '🇦🇪 AED',
+                                                '🇲🇦 MAD',
+                                                '🇪🇬 EGP',
+                                                '🇩🇿 DZD',
+                                                '🇯🇴 JOD',
+                                                '🇴🇲 OMR',
+                                                '🇰🇼 KWD',
+                                                '🇶🇦 QAR',
+                                                '🇧🇭 BHD',
+                                              ]
+                                              .map(
+                                                (c) => DropdownMenuItem(
+                                                  value: c,
+                                                  child: Text(c),
+                                                ),
+                                              )
+                                              .toList(),
+                                      onChanged: (val) {
+                                        if (val != null)
+                                          globalCurrencyNotifier.value = val;
+                                      },
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              '${netBalance.toStringAsFixed(2)} $currentCurrency',
+                              style: TextStyle(
+                                color: netBalance >= 0
+                                    ? Colors.green
+                                    : Colors.redAccent,
+                                fontSize: 24,
+                                fontWeight: FontWeight.bold,
                               ),
+                            ),
+                            const Divider(height: 20, color: Colors.black12),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceAround,
+                              children: [
+                                Column(
+                                  children: [
+                                    Text(
+                                      T.s('credit'),
+                                      style: const TextStyle(
+                                        color: Colors.grey,
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                    Text(
+                                      '+${totalCredit.toStringAsFixed(1)}',
+                                      style: const TextStyle(
+                                        color: Colors.green,
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 14,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                Column(
+                                  children: [
+                                    Text(
+                                      T.s('debit'),
+                                      style: const TextStyle(
+                                        color: Colors.grey,
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                    Text(
+                                      '-${totalDebit.toStringAsFixed(1)}',
+                                      style: const TextStyle(
+                                        color: Colors.redAccent,
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 14,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
                             ),
                           ],
                         ),
-                        if (_selectedCategory == T.s('cat3') && globalDebts.isNotEmpty)
-                          Padding(
-                            padding: const EdgeInsets.only(bottom: 8.0),
-                            child: Row(
+                      ),
+                      const SizedBox(height: 12),
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: isDark
+                              ? const Color(0xFF1E293B)
+                              : Colors.black.withOpacity(0.03),
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        child: Column(
+                          children: [
+                            Row(
                               children: [
-                                Text(T.s('debtLabel'),
-                                    style: const TextStyle(
-                                        fontSize: 12, fontWeight: FontWeight.bold)),
+                                Text(
+                                  T.s('type'),
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
                                 Expanded(
-                                  child: DropdownButton<int>(
-                                    value: _selectedDebtId,
+                                  child: DropdownButton<String>(
+                                    value: _selectedCategory,
                                     isExpanded: true,
-                                    hint: Text(T.s('debtHint'),
-                                        style: const TextStyle(fontSize: 12)),
-                                    items: globalDebts
-                                        .map((d) => DropdownMenuItem<int>(
-                                        value: d['id'],
-                                        child: Text(d['title'],
-                                            style: const TextStyle(fontSize: 12))))
+                                    underline: const SizedBox(),
+                                    dropdownColor: Theme.of(context).cardColor,
+                                    items: T.categories
+                                        .map(
+                                          (c) => DropdownMenuItem(
+                                            value: c,
+                                            child: Text(
+                                              c,
+                                              style: const TextStyle(
+                                                fontSize: 12,
+                                              ),
+                                            ),
+                                          ),
+                                        )
                                         .toList(),
                                     onChanged: (val) => setState(() {
-                                      _selectedDebtId = val;
-                                      if (_titleController.text.isEmpty)
-                                        _titleController.text =
-                                        '${T.s('installmentPrefix')} ${globalDebts.firstWhere((d) => d['id'] == val)['title']}';
+                                      _selectedCategory = val!;
+                                      if (_selectedCategory != T.s('cat3'))
+                                        _selectedDebtId = null;
                                     }),
                                   ),
                                 ),
                               ],
                             ),
-                          ),
-                        const SizedBox(height: 8),
-                        Row(
-                          children: [
-                            Expanded(
-                                flex: 2,
-                                child: TextField(
+                            if (_selectedCategory == T.s('cat3') &&
+                                globalDebts.isNotEmpty)
+                              Padding(
+                                padding: const EdgeInsets.only(bottom: 8.0),
+                                child: Row(
+                                  children: [
+                                    Text(
+                                      T.s('debtLabel'),
+                                      style: const TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                    Expanded(
+                                      child: DropdownButton<int>(
+                                        value: _selectedDebtId,
+                                        isExpanded: true,
+                                        hint: Text(
+                                          T.s('debtHint'),
+                                          style: const TextStyle(fontSize: 12),
+                                        ),
+                                        items: globalDebts
+                                            .map(
+                                              (d) => DropdownMenuItem<int>(
+                                                value: d['id'],
+                                                child: Text(
+                                                  d['title'],
+                                                  style: const TextStyle(
+                                                    fontSize: 12,
+                                                  ),
+                                                ),
+                                              ),
+                                            )
+                                            .toList(),
+                                        onChanged: (val) => setState(() {
+                                          _selectedDebtId = val;
+                                          if (_titleController.text.isEmpty)
+                                            _titleController.text =
+                                                '${T.s('installmentPrefix')} ${globalDebts.firstWhere((d) => d['id'] == val)['title']}';
+                                        }),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            const SizedBox(height: 8),
+                            Row(
+                              children: [
+                                Expanded(
+                                  flex: 2,
+                                  child: TextField(
                                     controller: _titleController,
                                     decoration: InputDecoration(
-                                        hintText: T.s('statement'),
-                                        hintStyle: const TextStyle(fontSize: 12),
-                                        filled: true,
-                                        fillColor: isDark
-                                            ? const Color(0xFF0F172A)
-                                            : Colors.white,
-                                        border: OutlineInputBorder(
-                                            borderRadius: BorderRadius.circular(10),
-                                            borderSide: BorderSide.none)))),
-                            const SizedBox(width: 6),
-                            Expanded(
-                                flex: 1,
-                                child: TextField(
+                                      hintText: T.s('statement'),
+                                      hintStyle: const TextStyle(fontSize: 12),
+                                      filled: true,
+                                      fillColor: isDark
+                                          ? const Color(0xFF0F172A)
+                                          : Colors.white,
+                                      border: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(10),
+                                        borderSide: BorderSide.none,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                                Expanded(
+                                  flex: 1,
+                                  child: TextField(
                                     controller: _amountController,
-                                    keyboardType: const TextInputType.numberWithOptions(
-                                        decimal: true),
+                                    keyboardType:
+                                        const TextInputType.numberWithOptions(
+                                          decimal: true,
+                                        ),
                                     decoration: InputDecoration(
-                                        hintText: T.s('amount'),
-                                        hintStyle: const TextStyle(fontSize: 12),
-                                        filled: true,
-                                        fillColor: isDark
-                                            ? const Color(0xFF0F172A)
-                                            : Colors.white,
-                                        border: OutlineInputBorder(
-                                            borderRadius: BorderRadius.circular(10),
-                                            borderSide: BorderSide.none)))),
-                            const SizedBox(width: 6),
-                            IconButton(
-                                style: IconButton.styleFrom(backgroundColor: mainColor),
-                                icon: const Icon(Icons.add, color: Colors.white),
-                                onPressed: _addTransaction),
+                                      hintText: T.s('amount'),
+                                      hintStyle: const TextStyle(fontSize: 12),
+                                      filled: true,
+                                      fillColor: isDark
+                                          ? const Color(0xFF0F172A)
+                                          : Colors.white,
+                                      border: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(10),
+                                        borderSide: BorderSide.none,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                                IconButton(
+                                  style: IconButton.styleFrom(
+                                    backgroundColor: mainColor,
+                                  ),
+                                  icon: const Icon(
+                                    Icons.add,
+                                    color: Colors.white,
+                                  ),
+                                  onPressed: _addTransaction,
+                                ),
+                              ],
+                            ),
                           ],
                         ),
-                      ],
-                    ),
+                      ),
+                      const SizedBox(height: 12),
+                    ],
                   ),
-                  const SizedBox(height: 12),
-                ],
-              ),
-            ),
-            SliverList(
-              delegate: SliverChildBuilderDelegate(
-                    (context, index) {
-                  final item = globalExpenses[index];
-                  final isCredit = item['isCredit'] ?? false;
-                  return Card(
-                    child: ListTile(
-                      leading: CircleAvatar(
+                ),
+                SliverList(
+                  delegate: SliverChildBuilderDelegate((context, index) {
+                    final item = globalExpenses[index];
+                    final isCredit = item['isCredit'] ?? false;
+                    return Card(
+                      child: ListTile(
+                        leading: CircleAvatar(
                           backgroundColor: isCredit
                               ? Colors.green.withOpacity(0.1)
                               : Colors.redAccent.withOpacity(0.1),
                           child: Icon(
-                              isCredit
-                                  ? Icons.arrow_downward
-                                  : Icons.arrow_upward,
-                              color: isCredit ? Colors.green : Colors.redAccent,
-                              size: 18)),
-                      title: Text(item['title'],
-                          style: const TextStyle(fontWeight: FontWeight.bold)),
-                      subtitle: Text('${item['category']} | ${item['date']}',
-                          style:
-                          const TextStyle(color: Colors.grey, fontSize: 10)),
-                      trailing: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text('${isCredit ? "+" : "-"}${item['amount']}',
+                            isCredit
+                                ? Icons.arrow_downward
+                                : Icons.arrow_upward,
+                            color: isCredit ? Colors.green : Colors.redAccent,
+                            size: 18,
+                          ),
+                        ),
+                        title: Text(
+                          item['title'],
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        subtitle: Text(
+                          '${item['category']} | ${item['date']}',
+                          style: const TextStyle(
+                            color: Colors.grey,
+                            fontSize: 10,
+                          ),
+                        ),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              '${isCredit ? "+" : "-"}${item['amount']}',
                               style: TextStyle(
-                                  color:
-                                  isCredit ? Colors.green : Colors.redAccent,
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 14)),
-                          IconButton(
-                              icon: const Icon(Icons.edit,
-                                  color: Colors.blue, size: 18),
-                              onPressed: () => _editTransaction(item, index)),
-                          IconButton(
-                              icon: const Icon(Icons.delete_outline,
-                                  color: Colors.redAccent, size: 18),
+                                color: isCredit
+                                    ? Colors.green
+                                    : Colors.redAccent,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 14,
+                              ),
+                            ),
+                            IconButton(
+                              icon: const Icon(
+                                Icons.edit,
+                                color: Colors.blue,
+                                size: 18,
+                              ),
+                              onPressed: () => _editTransaction(item, index),
+                            ),
+                            IconButton(
+                              icon: const Icon(
+                                Icons.delete_outline,
+                                color: Colors.redAccent,
+                                size: 18,
+                              ),
                               onPressed: () => setState(() {
                                 globalTrash.add({
                                   'type': T.s('typeExpense'),
                                   'title': item['title'],
-                                  'data': globalExpenses.removeAt(index)
+                                  'data': globalExpenses.removeAt(index),
                                 });
                                 StorageService.saveExpenses(globalExpenses);
                                 StorageService.saveTrash(globalTrash);
-                              })),
-                        ],
+                              }),
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
-                  );
-                },
-                childCount: globalExpenses.length,
-              ),
+                    );
+                  }, childCount: globalExpenses.length),
+                ),
+              ],
             ),
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
   }
 }
 
+// ==========================================
+// 3.2 شاشة المديونيات (DebtsView)
+// ==========================================
 class DebtsView extends StatefulWidget {
   const DebtsView({Key? key}) : super(key: key);
   @override
@@ -2201,8 +2929,9 @@ class _DebtsViewState extends State<DebtsView> {
 
   void _openAddDebtDialog({Map<String, dynamic>? existingDebt, int? index}) {
     final titleCtrl = TextEditingController(text: existingDebt?['title'] ?? '');
-    final totalCtrl =
-    TextEditingController(text: existingDebt?['total']?.toString() ?? '');
+    final totalCtrl = TextEditingController(
+      text: existingDebt?['total']?.toString() ?? '',
+    );
     showDialog(
       context: context,
       builder: (context) => Directionality(
@@ -2211,27 +2940,32 @@ class _DebtsViewState extends State<DebtsView> {
             : TextDirection.ltr,
         child: AlertDialog(
           title: Text(
-              existingDebt == null ? T.s('addDebtTitle') : T.s('editDebtTitle'),
-              style: const TextStyle(fontSize: 16)),
+            existingDebt == null ? T.s('addDebtTitle') : T.s('editDebtTitle'),
+            style: const TextStyle(fontSize: 16),
+          ),
           content: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
                 TextField(
-                    controller: titleCtrl,
-                    decoration: InputDecoration(labelText: T.s('debtName'))),
+                  controller: titleCtrl,
+                  decoration: InputDecoration(labelText: T.s('debtName')),
+                ),
                 TextField(
-                    controller: totalCtrl,
-                    keyboardType:
-                    const TextInputType.numberWithOptions(decimal: true),
-                    decoration: InputDecoration(labelText: T.s('debtTotal'))),
+                  controller: totalCtrl,
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
+                  decoration: InputDecoration(labelText: T.s('debtTotal')),
+                ),
               ],
             ),
           ),
           actions: [
             TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: Text(T.s('cancel'))),
+              onPressed: () => Navigator.pop(context),
+              child: Text(T.s('cancel')),
+            ),
             ElevatedButton(
               onPressed: () {
                 if (titleCtrl.text.isEmpty || totalCtrl.text.isEmpty) return;
@@ -2244,7 +2978,7 @@ class _DebtsViewState extends State<DebtsView> {
                       'title': titleCtrl.text,
                       'total': total,
                       'paid': 0.0,
-                      'date': getCurrentFormattedDate()
+                      'date': getCurrentFormattedDate(),
                     });
                   } else {
                     globalDebts[index]['title'] = titleCtrl.text;
@@ -2271,19 +3005,23 @@ class _DebtsViewState extends State<DebtsView> {
             ? TextDirection.rtl
             : TextDirection.ltr,
         child: AlertDialog(
-          title:
-          Text('${T.s('payInstallment')} ${globalDebts[index]['title']}'),
+          title: Text(
+            '${T.s('payInstallment')} ${globalDebts[index]['title']}',
+          ),
           content: SingleChildScrollView(
             child: TextField(
-                controller: amountCtrl,
-                keyboardType:
-                const TextInputType.numberWithOptions(decimal: true),
-                decoration: InputDecoration(labelText: T.s('payAmountNow'))),
+              controller: amountCtrl,
+              keyboardType: const TextInputType.numberWithOptions(
+                decimal: true,
+              ),
+              decoration: InputDecoration(labelText: T.s('payAmountNow')),
+            ),
           ),
           actions: [
             TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: Text(T.s('cancel'))),
+              onPressed: () => Navigator.pop(context),
+              child: Text(T.s('cancel')),
+            ),
             ElevatedButton(
               style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
               onPressed: () {
@@ -2295,7 +3033,7 @@ class _DebtsViewState extends State<DebtsView> {
                   globalExpenses.insert(0, {
                     'id': DateTime.now().millisecondsSinceEpoch,
                     'title':
-                    '${T.s('installmentPayPrefix')} ${globalDebts[index]['title']}',
+                        '${T.s('installmentPayPrefix')} ${globalDebts[index]['title']}',
                     'amount': paidAmount,
                     'category': T.s('cat3'),
                     'isCredit': false,
@@ -2305,11 +3043,14 @@ class _DebtsViewState extends State<DebtsView> {
                 StorageService.saveDebts(globalDebts);
                 StorageService.saveExpenses(globalExpenses);
                 Navigator.pop(context);
-                ScaffoldMessenger.of(context)
-                    .showSnackBar(SnackBar(content: Text(T.s('paySuccess'))));
+                ScaffoldMessenger.of(
+                  context,
+                ).showSnackBar(SnackBar(content: Text(T.s('paySuccess'))));
               },
-              child: Text(T.s('confirmPay'),
-                  style: const TextStyle(color: Colors.white)),
+              child: Text(
+                T.s('confirmPay'),
+                style: const TextStyle(color: Colors.white),
+              ),
             ),
           ],
         ),
@@ -2324,183 +3065,259 @@ class _DebtsViewState extends State<DebtsView> {
     double remainingDebts = totalDebts - totalPaid;
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    return Padding(
-      padding: const EdgeInsets.all(16.0),
-      child: Column(
-        children: [
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-                color: isDark ? const Color(0xFF1E293B) : Colors.white,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: Colors.redAccent.withOpacity(0.3))),
+    return ValueListenableBuilder<String>(
+      valueListenable: globalCurrencyNotifier,
+      builder: (context, currentCurrency, _) {
+        return GestureDetector(
+          onTap: () => FocusScope.of(context).unfocus(),
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(16.0),
+            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
             child: Column(
               children: [
-                Text(T.s('totalRemaining'),
-                    style: TextStyle(
-                        color: isDark ? Colors.white70 : Colors.black87,
-                        fontSize: 13,
-                        fontWeight: FontWeight.bold)),
-                const SizedBox(height: 4),
-                Text('${remainingDebts.toStringAsFixed(2)} ${T.s('currency')}',
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: isDark ? const Color(0xFF1E293B) : Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                      color: Colors.redAccent.withOpacity(0.3),
+                    ),
+                  ),
+                  child: Column(
+                    children: [
+                      Text(
+                        T.s('totalRemaining'),
+                        style: TextStyle(
+                          color: isDark ? Colors.white70 : Colors.black87,
+                          fontSize: 13,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        '${remainingDebts.toStringAsFixed(2)} $currentCurrency', // تم ربط العملة هنا
+                        style: const TextStyle(
+                          color: Colors.redAccent,
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const Divider(height: 20),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceAround,
+                        children: [
+                          Column(
+                            children: [
+                              Text(
+                                T.s('totalDebts'),
+                                style: const TextStyle(
+                                  color: Colors.grey,
+                                  fontSize: 12,
+                                ),
+                              ),
+                              Text(
+                                '${totalDebts.toStringAsFixed(1)}',
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 14,
+                                ),
+                              ),
+                            ],
+                          ),
+                          Column(
+                            children: [
+                              Text(
+                                T.s('totalPaid'),
+                                style: const TextStyle(
+                                  color: Colors.grey,
+                                  fontSize: 12,
+                                ),
+                              ),
+                              Text(
+                                '${totalPaid.toStringAsFixed(1)}',
+                                style: const TextStyle(
+                                  color: Colors.green,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 14,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+                ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFF43F5E),
+                    minimumSize: const Size(double.infinity, 48),
+                  ),
+                  icon: const Icon(Icons.add, color: Colors.white),
+                  label: Text(
+                    T.s('addDebt'),
                     style: const TextStyle(
-                        color: Colors.redAccent,
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold)),
-                const Divider(height: 20),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceAround,
-                  children: [
-                    Column(children: [
-                      Text(T.s('totalDebts'),
-                          style: const TextStyle(
-                              color: Colors.grey, fontSize: 12)),
-                      Text('${totalDebts.toStringAsFixed(1)}',
-                          style: const TextStyle(
-                              fontWeight: FontWeight.bold, fontSize: 14))
-                    ]),
-                    Column(children: [
-                      Text(T.s('totalPaid'),
-                          style: const TextStyle(
-                              color: Colors.grey, fontSize: 12)),
-                      Text('${totalPaid.toStringAsFixed(1)}',
-                          style: const TextStyle(
-                              color: Colors.green,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 14))
-                    ]),
-                  ],
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  onPressed: () => _openAddDebtDialog(),
+                ),
+                const SizedBox(height: 16),
+                ListView.builder(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  itemCount: globalDebts.length,
+                  itemBuilder: (context, index) {
+                    final debt = globalDebts[index];
+                    double total = debt['total'];
+                    double paid = debt['paid'];
+                    double remain = total - paid;
+                    double progress = total > 0
+                        ? (paid / total).clamp(0.0, 1.0)
+                        : 0;
+                    return Card(
+                      margin: const EdgeInsets.only(bottom: 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        side: BorderSide(
+                          color: isDark ? Colors.white12 : Colors.grey.shade200,
+                        ),
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.all(16.0),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text(
+                                  debt['title'],
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 16,
+                                  ),
+                                ),
+                                Row(
+                                  children: [
+                                    IconButton(
+                                      icon: const Icon(
+                                        Icons.edit,
+                                        color: Colors.blue,
+                                        size: 20,
+                                      ),
+                                      onPressed: () => _openAddDebtDialog(
+                                        existingDebt: debt,
+                                        index: index,
+                                      ),
+                                      padding: EdgeInsets.zero,
+                                      constraints: const BoxConstraints(),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    IconButton(
+                                      icon: const Icon(
+                                        Icons.delete_outline,
+                                        color: Colors.redAccent,
+                                        size: 20,
+                                      ),
+                                      onPressed: () => setState(() {
+                                        globalTrash.add({
+                                          'type': T.s('typeDebt'),
+                                          'title': debt['title'],
+                                          'data': globalDebts.removeAt(index),
+                                        });
+                                        StorageService.saveDebts(globalDebts);
+                                        StorageService.saveTrash(globalTrash);
+                                      }),
+                                      padding: EdgeInsets.zero,
+                                      constraints: const BoxConstraints(),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 12),
+                            LinearProgressIndicator(
+                              value: progress,
+                              backgroundColor: isDark
+                                  ? Colors.white10
+                                  : Colors.grey.shade200,
+                              color: progress >= 1.0
+                                  ? Colors.green
+                                  : Colors.redAccent,
+                              minHeight: 8,
+                            ),
+                            const SizedBox(height: 12),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text(
+                                  '${T.s('debtRemain')} ${remain.toStringAsFixed(1)}',
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.redAccent,
+                                  ),
+                                ),
+                                Text(
+                                  '${T.s('debtPaid')} ${paid.toStringAsFixed(1)}',
+                                  style: const TextStyle(color: Colors.green),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 12),
+                            if (remain > 0)
+                              ElevatedButton(
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.green.withOpacity(
+                                    0.1,
+                                  ),
+                                  elevation: 0,
+                                  minimumSize: const Size(double.infinity, 36),
+                                ),
+                                onPressed: () => _payInstallmentDialog(index),
+                                child: Text(
+                                  T.s('payNow'),
+                                  style: const TextStyle(
+                                    color: Colors.green,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              )
+                            else
+                              Container(
+                                width: double.infinity,
+                                alignment: Alignment.center,
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 8,
+                                ),
+                                child: Text(
+                                  T.s('debtCleared'),
+                                  style: const TextStyle(
+                                    color: Colors.green,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
                 ),
               ],
             ),
           ),
-          const SizedBox(height: 16),
-          ElevatedButton.icon(
-            style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFF43F5E),
-                minimumSize: const Size(double.infinity, 48)),
-            icon: const Icon(Icons.add, color: Colors.white),
-            label: Text(T.s('addDebt'),
-                style: const TextStyle(
-                    color: Colors.white, fontWeight: FontWeight.bold)),
-            onPressed: () => _openAddDebtDialog(),
-          ),
-          const SizedBox(height: 16),
-          Expanded(
-            child: ListView.builder(
-              itemCount: globalDebts.length,
-              itemBuilder: (context, index) {
-                final debt = globalDebts[index];
-                double total = debt['total'];
-                double paid = debt['paid'];
-                double remain = total - paid;
-                double progress =
-                total > 0 ? (paid / total).clamp(0.0, 1.0) : 0;
-                return Card(
-                  margin: const EdgeInsets.only(bottom: 12),
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      side: BorderSide(
-                          color:
-                          isDark ? Colors.white12 : Colors.grey.shade200)),
-                  child: Padding(
-                    padding: const EdgeInsets.all(16.0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text(debt['title'],
-                                style: const TextStyle(
-                                    fontWeight: FontWeight.bold, fontSize: 16)),
-                            Row(
-                              children: [
-                                IconButton(
-                                    icon: const Icon(Icons.edit,
-                                        color: Colors.blue, size: 20),
-                                    onPressed: () => _openAddDebtDialog(
-                                        existingDebt: debt, index: index),
-                                    padding: EdgeInsets.zero,
-                                    constraints: const BoxConstraints()),
-                                const SizedBox(width: 12),
-                                IconButton(
-                                    icon: const Icon(Icons.delete_outline,
-                                        color: Colors.redAccent, size: 20),
-                                    onPressed: () => setState(() {
-                                      globalTrash.add({
-                                        'type': T.s('typeDebt'),
-                                        'title': debt['title'],
-                                        'data': globalDebts.removeAt(index)
-                                      });
-                                      StorageService.saveDebts(globalDebts);
-                                      StorageService.saveTrash(globalTrash);
-                                    }),
-                                    padding: EdgeInsets.zero,
-                                    constraints: const BoxConstraints()),
-                              ],
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 12),
-                        LinearProgressIndicator(
-                            value: progress,
-                            backgroundColor:
-                            isDark ? Colors.white10 : Colors.grey.shade200,
-                            color: progress >= 1.0
-                                ? Colors.green
-                                : Colors.redAccent,
-                            minHeight: 8),
-                        const SizedBox(height: 12),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text(
-                                '${T.s('debtRemain')} ${remain.toStringAsFixed(1)}',
-                                style: const TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.redAccent)),
-                            Text(
-                                '${T.s('debtPaid')} ${paid.toStringAsFixed(1)}',
-                                style: const TextStyle(color: Colors.green)),
-                          ],
-                        ),
-                        const SizedBox(height: 12),
-                        if (remain > 0)
-                          ElevatedButton(
-                            style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.green.withOpacity(0.1),
-                                elevation: 0,
-                                minimumSize: const Size(double.infinity, 36)),
-                            onPressed: () => _payInstallmentDialog(index),
-                            child: Text(T.s('payNow'),
-                                style: const TextStyle(
-                                    color: Colors.green,
-                                    fontWeight: FontWeight.bold)),
-                          )
-                        else
-                          Container(
-                              width: double.infinity,
-                              alignment: Alignment.center,
-                              padding: const EdgeInsets.symmetric(vertical: 8),
-                              child: Text(T.s('debtCleared'),
-                                  style: const TextStyle(
-                                      color: Colors.green,
-                                      fontWeight: FontWeight.bold))),
-                      ],
-                    ),
-                  ),
-                );
-              },
-            ),
-          ),
-        ],
-      ),
+        );
+      },
     );
   }
 }
 
+// ==========================================
 // ==========================================
 // 4. شاشة الملاحظات
 // ==========================================
@@ -2532,14 +3349,14 @@ class _NotesTabState extends State<NotesTab> {
         Colors.red.shade100,
         Colors.teal.shade100,
         Colors.orange.shade100,
-        Colors.purple.shade100
+        Colors.purple.shade100,
       ];
     return [
       const Color(0xFF1E293B),
       Colors.red.shade900,
       Colors.teal.shade900,
       Colors.orange.shade900,
-      Colors.purple.shade900
+      Colors.purple.shade900,
     ];
   }
 
@@ -2559,21 +3376,23 @@ class _NotesTabState extends State<NotesTab> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 TextField(
-                    controller: p1,
-                    obscureText: true,
-                    decoration: InputDecoration(hintText: T.s('password'))),
+                  controller: p1,
+                  obscureText: true,
+                  decoration: InputDecoration(hintText: T.s('password')),
+                ),
                 TextField(
-                    controller: p2,
-                    obscureText: true,
-                    decoration:
-                    InputDecoration(hintText: T.s('confirmPassword'))),
+                  controller: p2,
+                  obscureText: true,
+                  decoration: InputDecoration(hintText: T.s('confirmPassword')),
+                ),
               ],
             ),
           ),
           actions: [
             TextButton(
-                onPressed: () => Navigator.pop(ctx),
-                child: Text(T.s('cancel'))),
+              onPressed: () => Navigator.pop(ctx),
+              child: Text(T.s('cancel')),
+            ),
             ElevatedButton(
               onPressed: () {
                 if (p1.text.isEmpty) return;
@@ -2581,7 +3400,8 @@ class _NotesTabState extends State<NotesTab> {
                   Navigator.pop(ctx, p1.text);
                 } else {
                   ScaffoldMessenger.of(ctx).showSnackBar(
-                      SnackBar(content: Text(T.s('passwordMismatch'))));
+                    SnackBar(content: Text(T.s('passwordMismatch'))),
+                  );
                 }
               },
               child: Text(T.s('confirm')),
@@ -2595,45 +3415,52 @@ class _NotesTabState extends State<NotesTab> {
   Future<bool> _showUnlockDialog(String correctPassword) async {
     final p = TextEditingController();
     return await showDialog<bool>(
-      context: context,
-      builder: (ctx) => Directionality(
-        textDirection: globalLangNotifier.value == 'ar'
-            ? TextDirection.rtl
-            : TextDirection.ltr,
-        child: AlertDialog(
-          title:
-          Text(T.s('noteLocked'), style: const TextStyle(fontSize: 16)),
-          content: SingleChildScrollView(
-            child: TextField(
-                controller: p,
-                obscureText: true,
-                autofocus: true,
-                decoration:
-                InputDecoration(hintText: T.s('enterPassword'))),
-          ),
-          actions: [
-            TextButton(
-                onPressed: () => Navigator.pop(ctx, false),
-                child: Text(T.s('cancel'))),
-            ElevatedButton(
-              onPressed: () {
-                if (p.text == correctPassword) {
-                  Navigator.pop(ctx, true);
-                } else {
-                  ScaffoldMessenger.of(ctx).showSnackBar(
-                      SnackBar(content: Text(T.s('wrongPassword'))));
-                }
-              },
-              child: Text(T.s('open')),
+          context: context,
+          builder: (ctx) => Directionality(
+            textDirection: globalLangNotifier.value == 'ar'
+                ? TextDirection.rtl
+                : TextDirection.ltr,
+            child: AlertDialog(
+              title: Text(
+                T.s('noteLocked'),
+                style: const TextStyle(fontSize: 16),
+              ),
+              content: SingleChildScrollView(
+                child: TextField(
+                  controller: p,
+                  obscureText: true,
+                  autofocus: true,
+                  decoration: InputDecoration(hintText: T.s('enterPassword')),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx, false),
+                  child: Text(T.s('cancel')),
+                ),
+                ElevatedButton(
+                  onPressed: () {
+                    if (p.text == correctPassword) {
+                      Navigator.pop(ctx, true);
+                    } else {
+                      ScaffoldMessenger.of(ctx).showSnackBar(
+                        SnackBar(content: Text(T.s('wrongPassword'))),
+                      );
+                    }
+                  },
+                  child: Text(T.s('open')),
+                ),
+              ],
             ),
-          ],
-        ),
-      ),
-    ) ??
+          ),
+        ) ??
         false;
   }
 
-  void _openNoteViewDialog({required Map<String, dynamic> note, required int index}) {
+  void _openNoteViewDialog({
+    required Map<String, dynamic> note,
+    required int index,
+  }) {
     final bool isAppDark = Theme.of(context).brightness == Brightness.dark;
     final List<Color> palette = _getPalette(isAppDark);
     final int colorIndex = note['colorIndex'] ?? 0;
@@ -2643,11 +3470,18 @@ class _NotesTabState extends State<NotesTab> {
     showDialog(
       context: context,
       builder: (context) => Directionality(
-        textDirection: globalLangNotifier.value == 'ar' ? TextDirection.rtl : TextDirection.ltr,
+        textDirection: globalLangNotifier.value == 'ar'
+            ? TextDirection.rtl
+            : TextDirection.ltr,
         child: Dialog(
           backgroundColor: bgColor,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 40),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          insetPadding: const EdgeInsets.symmetric(
+            horizontal: 20,
+            vertical: 40,
+          ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -2669,7 +3503,11 @@ class _NotesTabState extends State<NotesTab> {
                     if (note['important'] == true)
                       Icon(Icons.star, color: Colors.amber, size: 22),
                     IconButton(
-                      icon: Icon(Icons.edit, color: textColor.withOpacity(0.7), size: 22),
+                      icon: Icon(
+                        Icons.edit,
+                        color: textColor.withOpacity(0.7),
+                        size: 22,
+                      ),
                       tooltip: T.s('edit'),
                       onPressed: () {
                         Navigator.pop(context);
@@ -2677,7 +3515,11 @@ class _NotesTabState extends State<NotesTab> {
                       },
                     ),
                     IconButton(
-                      icon: Icon(Icons.close, color: textColor.withOpacity(0.7), size: 22),
+                      icon: Icon(
+                        Icons.close,
+                        color: textColor.withOpacity(0.7),
+                        size: 22,
+                      ),
                       onPressed: () => Navigator.pop(context),
                     ),
                   ],
@@ -2710,8 +3552,9 @@ class _NotesTabState extends State<NotesTab> {
     final List<Color> currentPalette = _getPalette(isAppDark);
     int selectedColorIndex = existingNote?['colorIndex'] ?? 0;
     final titleCtrl = TextEditingController(text: existingNote?['title'] ?? '');
-    final contentCtrl =
-    TextEditingController(text: existingNote?['content'] ?? '');
+    final contentCtrl = TextEditingController(
+      text: existingNote?['content'] ?? '',
+    );
     bool isImportant = existingNote?['important'] ?? false;
     bool isLocked = existingNote?['isLocked'] ?? false;
     String password = existingNote?['password'] ?? '';
@@ -2726,22 +3569,26 @@ class _NotesTabState extends State<NotesTab> {
               : TextDirection.ltr,
           child: AlertDialog(
             backgroundColor: currentPalette[selectedColorIndex],
-            shape:
-            RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
             title: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
-                    existingNote == null
-                        ? T.s('newNoteTitle')
-                        : T.s('editNoteTitle'),
-                    style: TextStyle(color: textColor, fontSize: 16)),
+                  existingNote == null
+                      ? T.s('newNoteTitle')
+                      : T.s('editNoteTitle'),
+                  style: TextStyle(color: textColor, fontSize: 16),
+                ),
                 Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     IconButton(
-                      icon: Icon(isLocked ? Icons.lock : Icons.lock_open,
-                          color: textColor),
+                      icon: Icon(
+                        isLocked ? Icons.lock : Icons.lock_open,
+                        color: textColor,
+                      ),
                       onPressed: () async {
                         if (isLocked) {
                           setDialogState(() {
@@ -2759,10 +3606,13 @@ class _NotesTabState extends State<NotesTab> {
                       },
                     ),
                     IconButton(
-                        icon: Icon(isImportant ? Icons.star : Icons.star_border,
-                            color: Colors.amber),
-                        onPressed: () =>
-                            setDialogState(() => isImportant = !isImportant)),
+                      icon: Icon(
+                        isImportant ? Icons.star : Icons.star_border,
+                        color: Colors.amber,
+                      ),
+                      onPressed: () =>
+                          setDialogState(() => isImportant = !isImportant),
+                    ),
                   ],
                 ),
               ],
@@ -2772,59 +3622,69 @@ class _NotesTabState extends State<NotesTab> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   TextField(
-                      controller: titleCtrl,
-                      decoration: InputDecoration(
-                          hintText: T.s('noteTitle'),
-                          hintStyle:
-                          TextStyle(color: textColor.withOpacity(0.6)),
-                          border: InputBorder.none),
-                      style: TextStyle(
-                          color: textColor, fontWeight: FontWeight.bold)),
+                    controller: titleCtrl,
+                    decoration: InputDecoration(
+                      hintText: T.s('noteTitle'),
+                      hintStyle: TextStyle(color: textColor.withOpacity(0.6)),
+                      border: InputBorder.none,
+                    ),
+                    style: TextStyle(
+                      color: textColor,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
                   Divider(color: textColor.withOpacity(0.2)),
                   TextField(
-                      controller: contentCtrl,
-                      maxLines: 5,
-                      decoration: InputDecoration(
-                          hintText: T.s('noteContent'),
-                          hintStyle:
-                          TextStyle(color: textColor.withOpacity(0.6)),
-                          border: InputBorder.none),
-                      style: TextStyle(color: textColor)),
+                    controller: contentCtrl,
+                    maxLines: 5,
+                    decoration: InputDecoration(
+                      hintText: T.s('noteContent'),
+                      hintStyle: TextStyle(color: textColor.withOpacity(0.6)),
+                      border: InputBorder.none,
+                    ),
+                    style: TextStyle(color: textColor),
+                  ),
                   const SizedBox(height: 12),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: List.generate(
-                        currentPalette.length,
-                            (i) => GestureDetector(
-                          onTap: () =>
-                              setDialogState(() => selectedColorIndex = i),
-                          child: Container(
-                            margin:
-                            const EdgeInsets.symmetric(horizontal: 4),
-                            width: 26,
-                            height: 26,
-                            decoration: BoxDecoration(
-                                color: currentPalette[i],
-                                shape: BoxShape.circle,
-                                border: Border.all(
-                                    color: selectedColorIndex == i
-                                        ? textColor
-                                        : Colors.transparent,
-                                    width: 2)),
+                      currentPalette.length,
+                      (i) => GestureDetector(
+                        onTap: () =>
+                            setDialogState(() => selectedColorIndex = i),
+                        child: Container(
+                          margin: const EdgeInsets.symmetric(horizontal: 4),
+                          width: 26,
+                          height: 26,
+                          decoration: BoxDecoration(
+                            color: currentPalette[i],
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: selectedColorIndex == i
+                                  ? textColor
+                                  : Colors.transparent,
+                              width: 2,
+                            ),
                           ),
-                        )),
+                        ),
+                      ),
+                    ),
                   ),
                 ],
               ),
             ),
             actions: [
               TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: Text(T.s('cancel'),
-                      style: TextStyle(color: textColor.withOpacity(0.7)))),
+                onPressed: () => Navigator.pop(context),
+                child: Text(
+                  T.s('cancel'),
+                  style: TextStyle(color: textColor.withOpacity(0.7)),
+                ),
+              ),
               ElevatedButton(
                 style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFFF59E0B)),
+                  backgroundColor: const Color(0xFFF59E0B),
+                ),
                 onPressed: () {
                   if (titleCtrl.text.isEmpty && contentCtrl.text.isEmpty)
                     return;
@@ -2834,10 +3694,11 @@ class _NotesTabState extends State<NotesTab> {
                       'content': contentCtrl.text,
                       'colorIndex': selectedColorIndex,
                       'important': isImportant,
-                      'dateTime': existingNote?['dateTime'] ??
+                      'dateTime':
+                          existingNote?['dateTime'] ??
                           getCurrentFormattedDate(),
                       'isLocked': isLocked,
-                      'password': password
+                      'password': password,
                     };
                     if (index == null)
                       globalNotes.insert(0, noteData);
@@ -2847,9 +3708,13 @@ class _NotesTabState extends State<NotesTab> {
                   StorageService.saveNotes(globalNotes);
                   Navigator.pop(context);
                 },
-                child: Text(T.s('save'),
-                    style: const TextStyle(
-                        color: Colors.black, fontWeight: FontWeight.bold)),
+                child: Text(
+                  T.s('save'),
+                  style: const TextStyle(
+                    color: Colors.black,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
               ),
             ],
           ),
@@ -2883,31 +3748,42 @@ class _NotesTabState extends State<NotesTab> {
               Expanded(
                 child: ElevatedButton.icon(
                   style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFFF59E0B),
-                      minimumSize: const Size(double.infinity, 48),
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12))),
+                    backgroundColor: const Color(0xFFF59E0B),
+                    minimumSize: const Size(double.infinity, 48),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
                   icon: const Icon(Icons.edit_note, color: Colors.black),
-                  label: Text(T.s('newNote'),
-                      style: const TextStyle(
-                          color: Colors.black, fontWeight: FontWeight.bold)),
+                  label: Text(
+                    T.s('newNote'),
+                    style: const TextStyle(
+                      color: Colors.black,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
                   onPressed: () => _openNoteDialog(),
                 ),
               ),
               const SizedBox(width: 8),
               IconButton(
-                  tooltip: T.s('sortByImportance'),
-                  style: IconButton.styleFrom(
-                      backgroundColor: Theme.of(context).cardColor),
-                  icon: const Icon(Icons.sort),
-                  onPressed: _sortNotes),
+                tooltip: T.s('sortByImportance'),
+                style: IconButton.styleFrom(
+                  backgroundColor: Theme.of(context).cardColor,
+                ),
+                icon: const Icon(Icons.sort),
+                onPressed: _sortNotes,
+              ),
             ],
           ),
           const SizedBox(height: 16),
           Expanded(
             child: GridView.builder(
               gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 2, crossAxisSpacing: 10, mainAxisSpacing: 10),
+                crossAxisCount: 2,
+                crossAxisSpacing: 10,
+                mainAxisSpacing: 10,
+              ),
               itemCount: globalNotes.length,
               itemBuilder: (context, index) {
                 final note = globalNotes[index];
@@ -2915,101 +3791,116 @@ class _NotesTabState extends State<NotesTab> {
                 final int colorIdx = note['colorIndex'] ?? 0;
                 final Color noteColor = currentPalette[colorIdx];
 
-                return Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: noteColor,
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(
+                // التعديل هنا: تغليف الحاوية بالكامل بـ GestureDetector للاستجابة للضغط
+                return GestureDetector(
+                  onTap: () async {
+                    if (isLocked) {
+                      bool unlocked = await _showUnlockDialog(note['password']);
+                      if (!unlocked) return;
+                    }
+                    _openNoteViewDialog(note: note, index: index);
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: noteColor,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
                         color: note['important'] == true
                             ? Colors.amber
                             : textColor.withOpacity(0.1),
-                        width: note['important'] == true ? 2 : 1),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Expanded(
-                              child: Text(note['title'],
-                                  style: TextStyle(
-                                      color: textColor,
-                                      fontWeight: FontWeight.bold),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis)),
-                          Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              if (isLocked)
-                                Padding(
-                                    padding: const EdgeInsets.only(left: 4),
-                                    child: Icon(Icons.lock,
-                                        size: 16,
-                                        color: textColor.withOpacity(0.7))),
-                              if (note['important'] == true)
-                                const Icon(Icons.star,
-                                    size: 16, color: Colors.amber),
-                            ],
-                          ),
-                        ],
+                        width: note['important'] == true ? 2 : 1,
                       ),
-                      Divider(color: textColor.withOpacity(0.2)),
-                      Expanded(
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Expanded(
+                              child: Text(
+                                note['title'],
+                                style: TextStyle(
+                                  color: textColor,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                if (isLocked)
+                                  Padding(
+                                    padding: const EdgeInsets.only(left: 4),
+                                    child: Icon(
+                                      Icons.lock,
+                                      size: 16,
+                                      color: textColor.withOpacity(0.7),
+                                    ),
+                                  ),
+                                if (note['important'] == true)
+                                  const Icon(
+                                    Icons.star,
+                                    size: 16,
+                                    color: Colors.amber,
+                                  ),
+                              ],
+                            ),
+                          ],
+                        ),
+                        Divider(color: textColor.withOpacity(0.2)),
+                        Expanded(
                           child: isLocked
                               ? Center(
-                              child: Icon(Icons.lock,
-                                  color: textColor.withOpacity(0.3),
-                                  size: 40))
-                              : Text(note['content'],
+                                  child: Icon(
+                                    Icons.lock,
+                                    color: textColor.withOpacity(0.3),
+                                    size: 40,
+                                  ),
+                                )
+                              : Text(
+                                  note['content'],
+                                  style: TextStyle(
+                                    color: textColor.withOpacity(0.8),
+                                    fontSize: 12,
+                                  ),
+                                  overflow: TextOverflow.fade,
+                                ),
+                        ),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              note['dateTime'].toString().split('-')[0],
                               style: TextStyle(
-                                  color: textColor.withOpacity(0.8),
-                                  fontSize: 12),
-                              overflow: TextOverflow.fade)),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(note['dateTime'].toString().split('-')[0],
-                              style: TextStyle(
-                                  color: textColor.withOpacity(0.5),
-                                  fontSize: 8)),
-                          Row(
-                            children: [
-                              GestureDetector(
-                                onTap: () async {
-                                  if (isLocked) {
-                                    bool unlocked = await _showUnlockDialog(
-                                        note['password']);
-                                    if (!unlocked) return;
-                                  }
-                                  _openNoteViewDialog(note: note, index: index);
-                                },
-                                child: Icon(Icons.visibility,
-                                    size: 18,
-                                    color: isAppDark
-                                        ? Colors.blue.shade800
-                                        : Colors.blue.shade200),
+                                color: textColor.withOpacity(0.5),
+                                fontSize: 8,
                               ),
-                              const SizedBox(width: 8),
-                              GestureDetector(
-                                onTap: () => setState(() {
-                                  globalTrash.add({
-                                    'type': T.s('typeNote'),
-                                    'title': note['title'],
-                                    'data': globalNotes.removeAt(index)
-                                  });
-                                  StorageService.saveNotes(globalNotes);
-                                  StorageService.saveTrash(globalTrash);
-                                }),
-                                child: const Icon(Icons.delete_sweep,
-                                    size: 18, color: Colors.redAccent),
+                            ),
+                            // التعديل هنا: إزالة أيقونة العين، والإبقاء على أيقونة الحذف فقط
+                            GestureDetector(
+                              onTap: () => setState(() {
+                                globalTrash.add({
+                                  'type': T.s('typeNote'),
+                                  'title': note['title'],
+                                  'data': globalNotes.removeAt(index),
+                                });
+                                StorageService.saveNotes(globalNotes);
+                                StorageService.saveTrash(globalTrash);
+                              }),
+                              child: const Icon(
+                                Icons.delete_sweep,
+                                size: 18,
+                                color: Colors.redAccent,
                               ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ],
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
                 );
               },
@@ -3048,32 +3939,38 @@ class _TrashTabState extends State<TrashTab> {
   String _getLocalizedType(String type) {
     if (type == 'مهمة عملية' ||
         type == 'Tâche pratique' ||
-        type == 'Practical Task') return T.s('typeTask');
+        type == 'Practical Task')
+      return T.s('typeTask');
     if (type == 'ملاحظة' || type == 'Note') return T.s('typeNote');
     if (type == 'عملية مالية' ||
         type == 'Transaction financière' ||
-        type == 'Financial Transaction') return T.s('typeExpense');
+        type == 'Financial Transaction')
+      return T.s('typeExpense');
     if (type == 'مديونية' || type == 'Dette' || type == 'Debt')
       return T.s('typeDebt');
     if (type == 'موعد تقويم' ||
         type == 'Événement calendrier' ||
-        type == 'Calendar Event') return T.s('typeCalendar');
+        type == 'Calendar Event')
+      return T.s('typeCalendar');
     return type;
   }
 
   IconData _typeIcon(String type) {
     if (type == 'مهمة عملية' ||
         type == 'Tâche pratique' ||
-        type == 'Practical Task') return Icons.business_center;
+        type == 'Practical Task')
+      return Icons.business_center;
     if (type == 'ملاحظة' || type == 'Note') return Icons.note_alt;
     if (type == 'عملية مالية' ||
         type == 'Transaction financière' ||
-        type == 'Financial Transaction') return Icons.account_balance_wallet;
+        type == 'Financial Transaction')
+      return Icons.account_balance_wallet;
     if (type == 'مديونية' || type == 'Dette' || type == 'Debt')
       return Icons.credit_card;
     if (type == 'موعد تقويم' ||
         type == 'Événement calendrier' ||
-        type == 'Calendar Event') return Icons.calendar_month;
+        type == 'Calendar Event')
+      return Icons.calendar_month;
     return Icons.delete;
   }
 
@@ -3088,8 +3985,10 @@ class _TrashTabState extends State<TrashTab> {
               alignment: Alignment.centerLeft,
               child: TextButton.icon(
                 icon: const Icon(Icons.delete_forever, color: Colors.red),
-                label: Text(T.s('emptyTrash'),
-                    style: const TextStyle(color: Colors.red)),
+                label: Text(
+                  T.s('emptyTrash'),
+                  style: const TextStyle(color: Colors.red),
+                ),
                 onPressed: () => setState(() {
                   globalTrash.clear();
                   StorageService.saveTrash(globalTrash);
@@ -3100,78 +3999,98 @@ class _TrashTabState extends State<TrashTab> {
             child: globalTrash.isEmpty
                 ? Center(child: Text(T.s('trashEmpty')))
                 : ListView.builder(
-              itemCount: globalTrash.length,
-              itemBuilder: (context, index) {
-                final item = globalTrash[index];
-                final localType = _getLocalizedType(item['type']);
-                final isDark =
-                    Theme.of(context).brightness == Brightness.dark;
-                return Card(
-                  margin: const EdgeInsets.only(bottom: 8),
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12)),
-                  child: ListTile(
-                    leading: CircleAvatar(
-                      backgroundColor: isDark
-                          ? const Color(0xFF334155)
-                          : const Color(0xFFF1F5F9),
-                      child: Icon(_typeIcon(item['type']),
-                          size: 20,
-                          color: isDark
-                              ? Colors.white60
-                              : const Color(0xFF64748B)),
-                    ),
-                    title: Text(item['title'] ?? T.s('noTitle'),
-                        style:
-                        const TextStyle(fontWeight: FontWeight.bold)),
-                    subtitle: Text('${T.s('itemType')} $localType',
-                        style: const TextStyle(fontSize: 12)),
-                    trailing: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        IconButton(
-                          icon: const Icon(Icons.restore, color: Colors.green),
-                          onPressed: () {
-                            setState(() {
-                              final restoredItem = globalTrash.removeAt(index);
-                              final type = restoredItem['type'];
-                              final data = restoredItem['data'];
+                    itemCount: globalTrash.length,
+                    itemBuilder: (context, index) {
+                      final item = globalTrash[index];
+                      final localType = _getLocalizedType(item['type']);
+                      final isDark =
+                          Theme.of(context).brightness == Brightness.dark;
+                      return Card(
+                        margin: const EdgeInsets.only(bottom: 8),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: ListTile(
+                          leading: CircleAvatar(
+                            backgroundColor: isDark
+                                ? const Color(0xFF334155)
+                                : const Color(0xFFF1F5F9),
+                            child: Icon(
+                              _typeIcon(item['type']),
+                              size: 20,
+                              color: isDark
+                                  ? Colors.white60
+                                  : const Color(0xFF64748B),
+                            ),
+                          ),
+                          title: Text(
+                            item['title'] ?? T.s('noTitle'),
+                            style: const TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                          subtitle: Text(
+                            '${T.s('itemType')} $localType',
+                            style: const TextStyle(fontSize: 12),
+                          ),
+                          trailing: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              IconButton(
+                                icon: const Icon(
+                                  Icons.restore,
+                                  color: Colors.green,
+                                ),
+                                onPressed: () {
+                                  setState(() {
+                                    final restoredItem = globalTrash.removeAt(
+                                      index,
+                                    );
+                                    final type = restoredItem['type'];
+                                    final data = restoredItem['data'];
 
-                              if (type == T.s('typeTask')) {
-                                globalPracticalTasks.add(data);
-                                StorageService.saveTasks(globalPracticalTasks);
-                              } else if (type == T.s('typeExpense')) {
-                                globalExpenses.add(data);
-                                StorageService.saveExpenses(globalExpenses);
-                              } else if (type == T.s('typeDebt')) {
-                                globalDebts.add(data);
-                                StorageService.saveDebts(globalDebts);
-                              } else if (type == T.s('typeNote')) {
-                                globalNotes.add(data);
-                                StorageService.saveNotes(globalNotes);
-                              } else if (type == T.s('typeCalendar')) {
-                                globalCalendarEvents.add(data);
-                                StorageService.saveCalendarEvents(globalCalendarEvents);
-                              }
-                              StorageService.saveTrash(globalTrash);
-                            });
-                          },
+                                    if (type == T.s('typeTask')) {
+                                      globalPracticalTasks.add(data);
+                                      StorageService.saveTasks(
+                                        globalPracticalTasks,
+                                      );
+                                    } else if (type == T.s('typeExpense')) {
+                                      globalExpenses.add(data);
+                                      StorageService.saveExpenses(
+                                        globalExpenses,
+                                      );
+                                    } else if (type == T.s('typeDebt')) {
+                                      globalDebts.add(data);
+                                      StorageService.saveDebts(globalDebts);
+                                    } else if (type == T.s('typeNote')) {
+                                      globalNotes.add(data);
+                                      StorageService.saveNotes(globalNotes);
+                                    } else if (type == T.s('typeCalendar')) {
+                                      globalCalendarEvents.add(data);
+                                      StorageService.saveCalendarEvents(
+                                        globalCalendarEvents,
+                                      );
+                                    }
+                                    StorageService.saveTrash(globalTrash);
+                                  });
+                                },
+                              ),
+                              IconButton(
+                                icon: const Icon(
+                                  Icons.delete_forever,
+                                  color: Colors.redAccent,
+                                ),
+                                onPressed: () {
+                                  setState(() {
+                                    globalTrash.removeAt(index);
+                                    StorageService.saveTrash(globalTrash);
+                                  });
+                                },
+                              ),
+                            ],
+                          ),
                         ),
-                        IconButton(
-                          icon: const Icon(Icons.delete_forever, color: Colors.redAccent),
-                          onPressed: () {
-                            setState(() {
-                              globalTrash.removeAt(index);
-                              StorageService.saveTrash(globalTrash);
-                            });
-                          },
-                        ),
-                      ],
-                    ),
+                      );
+                    },
                   ),
-                );
-              },
-            ),
           ),
         ],
       ),
@@ -3207,8 +4126,18 @@ class _SmartCalendarTabState extends State<SmartCalendarTab> {
   void _onLangChange() => setState(() {});
   String _monthName(int month) {
     const keys = [
-      'jan', 'feb', 'mar', 'apr', 'may', 'jun',
-      'jul', 'aug', 'sep', 'oct', 'nov', 'dec'
+      'jan',
+      'feb',
+      'mar',
+      'apr',
+      'may',
+      'jun',
+      'jul',
+      'aug',
+      'sep',
+      'oct',
+      'nov',
+      'dec',
     ];
     return T.s(keys[month - 1]);
   }
@@ -3222,12 +4151,11 @@ class _SmartCalendarTabState extends State<SmartCalendarTab> {
     return globalCalendarEvents.where((e) {
       final d = e['date'] as DateTime;
       return d.year == day.year && d.month == day.month && d.day == day.day;
-    }).toList()
-      ..sort((a, b) {
-        final ta = a['time'] as TimeOfDay;
-        final tb = b['time'] as TimeOfDay;
-        return (ta.hour * 60 + ta.minute).compareTo(tb.hour * 60 + tb.minute);
-      });
+    }).toList()..sort((a, b) {
+      final ta = a['time'] as TimeOfDay;
+      final tb = b['time'] as TimeOfDay;
+      return (ta.hour * 60 + ta.minute).compareTo(tb.hour * 60 + tb.minute);
+    });
   }
 
   List<Map<String, dynamic>> _upcomingEvents() {
@@ -3237,54 +4165,72 @@ class _SmartCalendarTabState extends State<SmartCalendarTab> {
       final t = e['time'] as TimeOfDay;
       final eventDt = DateTime(d.year, d.month, d.day, t.hour, t.minute);
       return eventDt.isAfter(now);
-    }).toList()
-      ..sort((a, b) {
-        final da = a['date'] as DateTime;
-        final ta = a['time'] as TimeOfDay;
-        final db = b['date'] as DateTime;
-        final tb = b['time'] as TimeOfDay;
-        final dtA = DateTime(da.year, da.month, da.day, ta.hour, ta.minute);
-        final dtB = DateTime(db.year, db.month, db.day, tb.hour, tb.minute);
-        return dtA.compareTo(dtB);
-      });
+    }).toList()..sort((a, b) {
+      final da = a['date'] as DateTime;
+      final ta = a['time'] as TimeOfDay;
+      final db = b['date'] as DateTime;
+      final tb = b['time'] as TimeOfDay;
+      final dtA = DateTime(da.year, da.month, da.day, ta.hour, ta.minute);
+      final dtB = DateTime(db.year, db.month, db.day, tb.hour, tb.minute);
+      return dtA.compareTo(dtB);
+    });
   }
 
   Color _eventTypeColor(String type) {
     switch (type) {
-      case 'meeting': return const Color(0xFF0284C7);
-      case 'medical': return const Color(0xFFF43F5E);
-      case 'task': return const Color(0xFF10B981);
-      case 'reminder': return const Color(0xFFF59E0B);
-      case 'personal': return const Color(0xFF8B5CF6);
-      default: return const Color(0xFF64748B);
+      case 'meeting':
+        return const Color(0xFF0284C7);
+      case 'medical':
+        return const Color(0xFFF43F5E);
+      case 'task':
+        return const Color(0xFF10B981);
+      case 'reminder':
+        return const Color(0xFFF59E0B);
+      case 'personal':
+        return const Color(0xFF8B5CF6);
+      default:
+        return const Color(0xFF64748B);
     }
   }
 
   IconData _eventTypeIcon(String type) {
     switch (type) {
-      case 'meeting': return Icons.groups;
-      case 'medical': return Icons.local_hospital;
-      case 'task': return Icons.task_alt;
-      case 'reminder': return Icons.notifications_active;
-      case 'personal': return Icons.person;
-      default: return Icons.event;
+      case 'meeting':
+        return Icons.groups;
+      case 'medical':
+        return Icons.local_hospital;
+      case 'task':
+        return Icons.task_alt;
+      case 'reminder':
+        return Icons.notifications_active;
+      case 'personal':
+        return Icons.person;
+      default:
+        return Icons.event;
     }
   }
 
   String _eventTypeLabel(String type) {
     switch (type) {
-      case 'meeting': return T.s('evtMeeting');
-      case 'medical': return T.s('evtAppointment');
-      case 'task': return T.s('evttask');
-      case 'reminder': return T.s('evtReminder');
-      case 'personal': return T.s('evtPersonal');
-      default: return T.s('evtOther');
+      case 'meeting':
+        return T.s('evtMeeting');
+      case 'medical':
+        return T.s('evtAppointment');
+      case 'task':
+        return T.s('evttask');
+      case 'reminder':
+        return T.s('evtReminder');
+      case 'personal':
+        return T.s('evtPersonal');
+      default:
+        return T.s('evtOther');
     }
   }
 
   void _openAddEventDialog({Map<String, dynamic>? existingEvent, int? index}) {
-    final titleCtrl =
-    TextEditingController(text: existingEvent?['title'] ?? '');
+    final titleCtrl = TextEditingController(
+      text: existingEvent?['title'] ?? '',
+    );
     final descCtrl = TextEditingController(text: existingEvent?['desc'] ?? '');
     DateTime selectedDate = existingEvent?['date'] ?? _selectedDay;
     TimeOfDay selectedTime =
@@ -3292,12 +4238,42 @@ class _SmartCalendarTabState extends State<SmartCalendarTab> {
     String selectedType = existingEvent?['type'] ?? 'meeting';
 
     final typeOptions = [
-      {'value': 'meeting', 'label': T.s('evtMeeting'), 'icon': Icons.groups, 'color': const Color(0xFF0284C7)},
-      {'value': 'medical', 'label': T.s('evtAppointment'), 'icon': Icons.local_hospital, 'color': const Color(0xFFF43F5E)},
-      {'value': 'task', 'label': T.s('evttask'), 'icon': Icons.task_alt, 'color': const Color(0xFF10B981)},
-      {'value': 'reminder', 'label': T.s('evtReminder'), 'icon': Icons.notifications_active, 'color': const Color(0xFFF59E0B)},
-      {'value': 'personal', 'label': T.s('evtPersonal'), 'icon': Icons.person, 'color': const Color(0xFF8B5CF6)},
-      {'value': 'other', 'label': T.s('evtOther'), 'icon': Icons.event, 'color': const Color(0xFF64748B)},
+      {
+        'value': 'meeting',
+        'label': T.s('evtMeeting'),
+        'icon': Icons.groups,
+        'color': const Color(0xFF0284C7),
+      },
+      {
+        'value': 'medical',
+        'label': T.s('evtAppointment'),
+        'icon': Icons.local_hospital,
+        'color': const Color(0xFFF43F5E),
+      },
+      {
+        'value': 'task',
+        'label': T.s('evttask'),
+        'icon': Icons.task_alt,
+        'color': const Color(0xFF10B981),
+      },
+      {
+        'value': 'reminder',
+        'label': T.s('evtReminder'),
+        'icon': Icons.notifications_active,
+        'color': const Color(0xFFF59E0B),
+      },
+      {
+        'value': 'personal',
+        'label': T.s('evtPersonal'),
+        'icon': Icons.person,
+        'color': const Color(0xFF8B5CF6),
+      },
+      {
+        'value': 'other',
+        'label': T.s('evtOther'),
+        'icon': Icons.event,
+        'color': const Color(0xFF64748B),
+      },
     ];
     showDialog(
       context: context,
@@ -3307,13 +4283,22 @@ class _SmartCalendarTabState extends State<SmartCalendarTab> {
               ? TextDirection.rtl
               : TextDirection.ltr,
           child: AlertDialog(
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+            ),
             title: Row(
               children: [
                 const Icon(Icons.calendar_month, color: Color(0xFF6366F1)),
                 const SizedBox(width: 8),
-                Text(existingEvent == null ? T.s('addEventTitle') : T.s('editEventTitle'),
-                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                Text(
+                  existingEvent == null
+                      ? T.s('addEventTitle')
+                      : T.s('editEventTitle'),
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                  ),
+                ),
               ],
             ),
             content: SizedBox(
@@ -3327,8 +4312,13 @@ class _SmartCalendarTabState extends State<SmartCalendarTab> {
                       controller: titleCtrl,
                       decoration: InputDecoration(
                         labelText: T.s('eventName'),
-                        prefixIcon: const Icon(Icons.title, color: Color(0xFF6366F1)),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        prefixIcon: const Icon(
+                          Icons.title,
+                          color: Color(0xFF6366F1),
+                        ),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
                       ),
                     ),
                     const SizedBox(height: 12),
@@ -3337,8 +4327,13 @@ class _SmartCalendarTabState extends State<SmartCalendarTab> {
                       maxLines: 2,
                       decoration: InputDecoration(
                         labelText: T.s('eventDesc'),
-                        prefixIcon: const Icon(Icons.notes, color: Color(0xFF6366F1)),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        prefixIcon: const Icon(
+                          Icons.notes,
+                          color: Color(0xFF6366F1),
+                        ),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
                       ),
                     ),
                     const SizedBox(height: 12),
@@ -3353,17 +4348,29 @@ class _SmartCalendarTabState extends State<SmartCalendarTab> {
                         if (picked != null) setDS(() => selectedDate = picked);
                       },
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 12,
+                        ),
                         decoration: BoxDecoration(
                           border: Border.all(color: Colors.grey.shade400),
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: Row(
                           children: [
-                            const Icon(Icons.calendar_today, color: Color(0xFF6366F1), size: 20),
+                            const Icon(
+                              Icons.calendar_today,
+                              color: Color(0xFF6366F1),
+                              size: 20,
+                            ),
                             const SizedBox(width: 10),
-                            Text('${selectedDate.day}/${selectedDate.month}/${selectedDate.year}',
-                                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+                            Text(
+                              '${selectedDate.day}/${selectedDate.month}/${selectedDate.year}',
+                              style: const TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
                           ],
                         ),
                       ),
@@ -3371,27 +4378,48 @@ class _SmartCalendarTabState extends State<SmartCalendarTab> {
                     const SizedBox(height: 12),
                     GestureDetector(
                       onTap: () async {
-                        final picked = await showTimePicker(context: context, initialTime: selectedTime);
+                        final picked = await showTimePicker(
+                          context: context,
+                          initialTime: selectedTime,
+                        );
                         if (picked != null) setDS(() => selectedTime = picked);
                       },
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 12,
+                        ),
                         decoration: BoxDecoration(
                           border: Border.all(color: Colors.grey.shade400),
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: Row(
                           children: [
-                            const Icon(Icons.access_time, color: Color(0xFF6366F1), size: 20),
+                            const Icon(
+                              Icons.access_time,
+                              color: Color(0xFF6366F1),
+                              size: 20,
+                            ),
                             const SizedBox(width: 10),
-                            Text('${selectedTime.hour.toString().padLeft(2, '0')}:${selectedTime.minute.toString().padLeft(2, '0')}',
-                                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+                            Text(
+                              '${selectedTime.hour.toString().padLeft(2, '0')}:${selectedTime.minute.toString().padLeft(2, '0')}',
+                              style: const TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
                           ],
                         ),
                       ),
                     ),
                     const SizedBox(height: 12),
-                    Text(T.s('eventType'), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                    Text(
+                      T.s('eventType'),
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                      ),
+                    ),
                     const SizedBox(height: 8),
                     Wrap(
                       spacing: 8,
@@ -3400,22 +4428,42 @@ class _SmartCalendarTabState extends State<SmartCalendarTab> {
                         final isSelected = selectedType == opt['value'];
                         final color = opt['color'] as Color;
                         return GestureDetector(
-                          onTap: () => setDS(() => selectedType = opt['value'] as String),
+                          onTap: () => setDS(
+                            () => selectedType = opt['value'] as String,
+                          ),
                           child: AnimatedContainer(
                             duration: const Duration(milliseconds: 200),
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 6,
+                            ),
                             decoration: BoxDecoration(
-                              color: isSelected ? color : color.withOpacity(0.1),
+                              color: isSelected
+                                  ? color
+                                  : color.withOpacity(0.1),
                               borderRadius: BorderRadius.circular(20),
-                              border: Border.all(color: color, width: isSelected ? 2 : 1),
+                              border: Border.all(
+                                color: color,
+                                width: isSelected ? 2 : 1,
+                              ),
                             ),
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                Icon(opt['icon'] as IconData, size: 14, color: isSelected ? Colors.white : color),
+                                Icon(
+                                  opt['icon'] as IconData,
+                                  size: 14,
+                                  color: isSelected ? Colors.white : color,
+                                ),
                                 const SizedBox(width: 4),
-                                Text(opt['label'] as String,
-                                    style: TextStyle(fontSize: 12, color: isSelected ? Colors.white : color, fontWeight: FontWeight.bold)),
+                                Text(
+                                  opt['label'] as String,
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: isSelected ? Colors.white : color,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
                               ],
                             ),
                           ),
@@ -3427,17 +4475,24 @@ class _SmartCalendarTabState extends State<SmartCalendarTab> {
               ),
             ),
             actions: [
-              TextButton(onPressed: () => Navigator.pop(context), child: Text(T.s('cancel'))),
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: Text(T.s('cancel')),
+              ),
               ElevatedButton(
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFF6366F1),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
                 ),
                 onPressed: () {
                   if (titleCtrl.text.trim().isEmpty) return;
                   setState(() {
                     final eventData = {
-                      'id': existingEvent?['id'] ?? DateTime.now().millisecondsSinceEpoch,
+                      'id':
+                          existingEvent?['id'] ??
+                          DateTime.now().millisecondsSinceEpoch,
                       'title': titleCtrl.text.trim(),
                       'desc': descCtrl.text.trim(),
                       'date': selectedDate,
@@ -3453,8 +4508,13 @@ class _SmartCalendarTabState extends State<SmartCalendarTab> {
                   StorageService.saveCalendarEvents(globalCalendarEvents);
                   Navigator.pop(context);
                 },
-                child: Text(existingEvent == null ? T.s('add') : T.s('save'),
-                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                child: Text(
+                  existingEvent == null ? T.s('add') : T.s('save'),
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
               ),
             ],
           ),
@@ -3465,7 +4525,9 @@ class _SmartCalendarTabState extends State<SmartCalendarTab> {
 
   Widget _buildMiniCalendar(bool isDark) {
     final now = DateTime.now();
-    final headerColor = isDark ? const Color(0xFF6366F1) : const Color(0xFF0284C7);
+    final headerColor = isDark
+        ? const Color(0xFF6366F1)
+        : const Color(0xFF0284C7);
     final cardColor = isDark ? const Color(0xFF1E293B) : Colors.white;
     final textColor = isDark ? Colors.white : const Color(0xFF1E293B);
 
@@ -3486,8 +4548,14 @@ class _SmartCalendarTabState extends State<SmartCalendarTab> {
         return Expanded(child: Container(height: 38));
       }
       final thisDay = DateTime(_focusedDay.year, _focusedDay.month, dayNum);
-      final isToday = thisDay.year == now.year && thisDay.month == now.month && thisDay.day == now.day;
-      final isSelected = thisDay.year == _selectedDay.year && thisDay.month == _selectedDay.month && thisDay.day == _selectedDay.day;
+      final isToday =
+          thisDay.year == now.year &&
+          thisDay.month == now.month &&
+          thisDay.day == now.day;
+      final isSelected =
+          thisDay.year == _selectedDay.year &&
+          thisDay.month == _selectedDay.month &&
+          thisDay.day == _selectedDay.day;
       final hasEvents = _eventsForDay(thisDay).isNotEmpty;
       final isFriday = col == 4; // العمود الخامس = الجمعة (Mon=0..Sun=6)
       return Expanded(
@@ -3497,21 +4565,36 @@ class _SmartCalendarTabState extends State<SmartCalendarTab> {
             height: 38,
             margin: const EdgeInsets.all(2),
             decoration: BoxDecoration(
-              color: isSelected ? headerColor : isToday ? headerColor.withOpacity(0.15) : null,
+              color: isSelected
+                  ? headerColor
+                  : isToday
+                  ? headerColor.withOpacity(0.15)
+                  : null,
               borderRadius: BorderRadius.circular(8),
             ),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Text('$dayNum',
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: isToday || isSelected ? FontWeight.bold : FontWeight.normal,
-                      color: isSelected ? Colors.white : isToday ? headerColor : isFriday ? Colors.redAccent.withOpacity(0.8) : textColor,
-                    )),
+                Text(
+                  '$dayNum',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: isToday || isSelected
+                        ? FontWeight.bold
+                        : FontWeight.normal,
+                    color: isSelected
+                        ? Colors.white
+                        : isToday
+                        ? headerColor
+                        : isFriday
+                        ? Colors.redAccent.withOpacity(0.8)
+                        : textColor,
+                  ),
+                ),
                 if (hasEvents)
                   Container(
-                    width: 4, height: 4,
+                    width: 4,
+                    height: 4,
                     decoration: BoxDecoration(
                       color: isSelected ? Colors.white : headerColor,
                       shape: BoxShape.circle,
@@ -3538,14 +4621,20 @@ class _SmartCalendarTabState extends State<SmartCalendarTab> {
 
     Widget buildMonthRows() {
       return Column(
-        children: List.generate(rows, (row) => Row(
-          mainAxisAlignment: MainAxisAlignment.spaceAround,
-          children: List.generate(7, (col) {
-            final cellIndex = row * 7 + col;
-            final dayNum = cellIndex - (startWeekday - 2);
-            return buildDayCell((dayNum < 1 || dayNum > lastDay.day) ? null : dayNum, col);
-          }),
-        )),
+        children: List.generate(
+          rows,
+          (row) => Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            children: List.generate(7, (col) {
+              final cellIndex = row * 7 + col;
+              final dayNum = cellIndex - (startWeekday - 2);
+              return buildDayCell(
+                (dayNum < 1 || dayNum > lastDay.day) ? null : dayNum,
+                col,
+              );
+            }),
+          ),
+        ),
       );
     }
 
@@ -3567,7 +4656,15 @@ class _SmartCalendarTabState extends State<SmartCalendarTab> {
         decoration: BoxDecoration(
           color: cardColor,
           borderRadius: BorderRadius.circular(20),
-          boxShadow: isDark ? null : [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 12, offset: const Offset(0, 4))],
+          boxShadow: isDark
+              ? null
+              : [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.05),
+                    blurRadius: 12,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
         ),
         child: Column(
           children: [
@@ -3576,14 +4673,22 @@ class _SmartCalendarTabState extends State<SmartCalendarTab> {
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
               decoration: BoxDecoration(
                 color: headerColor,
-                borderRadius: const BorderRadius.only(topLeft: Radius.circular(20), topRight: Radius.circular(20)),
+                borderRadius: const BorderRadius.only(
+                  topLeft: Radius.circular(20),
+                  topRight: Radius.circular(20),
+                ),
               ),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   if (!_isWeekView)
                     IconButton(
-                      onPressed: () => setState(() => _focusedDay = DateTime(_focusedDay.year, _focusedDay.month - 1)),
+                      onPressed: () => setState(
+                        () => _focusedDay = DateTime(
+                          _focusedDay.year,
+                          _focusedDay.month - 1,
+                        ),
+                      ),
                       icon: const Icon(Icons.chevron_left, color: Colors.white),
                       padding: EdgeInsets.zero,
                       constraints: const BoxConstraints(),
@@ -3599,7 +4704,11 @@ class _SmartCalendarTabState extends State<SmartCalendarTab> {
                           _isWeekView
                               ? '${_monthName(_selectedDay.month)} ${_selectedDay.year}'
                               : '${_monthName(_focusedDay.month)} ${_focusedDay.year}',
-                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
+                          ),
                         ),
                         const SizedBox(width: 6),
                         Icon(
@@ -3612,8 +4721,16 @@ class _SmartCalendarTabState extends State<SmartCalendarTab> {
                   ),
                   if (!_isWeekView)
                     IconButton(
-                      onPressed: () => setState(() => _focusedDay = DateTime(_focusedDay.year, _focusedDay.month + 1)),
-                      icon: const Icon(Icons.chevron_right, color: Colors.white),
+                      onPressed: () => setState(
+                        () => _focusedDay = DateTime(
+                          _focusedDay.year,
+                          _focusedDay.month + 1,
+                        ),
+                      ),
+                      icon: const Icon(
+                        Icons.chevron_right,
+                        color: Colors.white,
+                      ),
                       padding: EdgeInsets.zero,
                       constraints: const BoxConstraints(),
                     )
@@ -3627,24 +4744,32 @@ class _SmartCalendarTabState extends State<SmartCalendarTab> {
               padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceAround,
-                children: [1, 2, 3, 4, 5, 6, 7].map((wd) => Expanded(
-                  child: Center(
-                    child: Text(
-                      _weekdayShort(wd),
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.bold,
-                        color: wd == 5 ? Colors.redAccent : textColor.withOpacity(0.5),
+                children: [1, 2, 3, 4, 5, 6, 7]
+                    .map(
+                      (wd) => Expanded(
+                        child: Center(
+                          child: Text(
+                            _weekdayShort(wd),
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              color: wd == 5
+                                  ? Colors.redAccent
+                                  : textColor.withOpacity(0.5),
+                            ),
+                          ),
+                        ),
                       ),
-                    ),
-                  ),
-                )).toList(),
+                    )
+                    .toList(),
               ),
             ),
             // الأيام (أسبوع أو شهر)
             AnimatedCrossFade(
               duration: const Duration(milliseconds: 350),
-              crossFadeState: _isWeekView ? CrossFadeState.showFirst : CrossFadeState.showSecond,
+              crossFadeState: _isWeekView
+                  ? CrossFadeState.showFirst
+                  : CrossFadeState.showSecond,
               firstChild: Padding(
                 padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
                 child: buildWeekRow(),
@@ -3679,21 +4804,58 @@ class _SmartCalendarTabState extends State<SmartCalendarTab> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => Directionality(
-        textDirection: globalLangNotifier.value == 'ar' ? TextDirection.rtl : TextDirection.ltr,
+        textDirection: globalLangNotifier.value == 'ar'
+            ? TextDirection.rtl
+            : TextDirection.ltr,
         child: AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          title: Row(children: [
-            const Icon(Icons.warning_amber_rounded, color: Colors.redAccent, size: 24),
-            const SizedBox(width: 8),
-            Text(T.s('deleteEventConfirmTitle'), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-          ]),
-          content: Text(T.s('deleteEventConfirmMsg'), style: const TextStyle(fontSize: 14, height: 1.5)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          title: Row(
+            children: [
+              const Icon(
+                Icons.warning_amber_rounded,
+                color: Colors.redAccent,
+                size: 24,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                T.s('deleteEventConfirmTitle'),
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                ),
+              ),
+            ],
+          ),
+          content: Text(
+            T.s('deleteEventConfirmMsg'),
+            style: const TextStyle(fontSize: 14, height: 1.5),
+          ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(T.s('cancel'))),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: Text(T.s('cancel')),
+            ),
             ElevatedButton.icon(
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
-              icon: const Icon(Icons.delete_outline, color: Colors.white, size: 16),
-              label: Text(T.s('deleteConfirmYes'), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.redAccent,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+              icon: const Icon(
+                Icons.delete_outline,
+                color: Colors.white,
+                size: 16,
+              ),
+              label: Text(
+                T.s('deleteConfirmYes'),
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
               onPressed: () => Navigator.pop(ctx, true),
             ),
           ],
@@ -3702,29 +4864,38 @@ class _SmartCalendarTabState extends State<SmartCalendarTab> {
     );
     if (confirmed == true) {
       setState(() {
-        globalTrash.add({'type': T.s('typeCalendar'), 'title': event['title'], 'data': Map<String, dynamic>.from(event)});
+        globalTrash.add({
+          'type': T.s('typeCalendar'),
+          'title': event['title'],
+          'data': Map<String, dynamic>.from(event),
+        });
         globalCalendarEvents.removeAt(index);
       });
       StorageService.saveCalendarEvents(globalCalendarEvents);
       StorageService.saveTrash(globalTrash);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('🗑️ ${event['title']}'),
-          action: SnackBarAction(
-            label: T.s('restore'),
-            onPressed: () {
-              setState(() {
-                final restored = globalTrash.lastWhere((e) => e['title'] == event['title'], orElse: () => {});
-                if (restored.isNotEmpty) {
-                  globalCalendarEvents.add(restored['data']);
-                  globalTrash.remove(restored);
-                  StorageService.saveCalendarEvents(globalCalendarEvents);
-                  StorageService.saveTrash(globalTrash);
-                }
-              });
-            },
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('🗑️ ${event['title']}'),
+            action: SnackBarAction(
+              label: T.s('restore'),
+              onPressed: () {
+                setState(() {
+                  final restored = globalTrash.lastWhere(
+                    (e) => e['title'] == event['title'],
+                    orElse: () => {},
+                  );
+                  if (restored.isNotEmpty) {
+                    globalCalendarEvents.add(restored['data']);
+                    globalTrash.remove(restored);
+                    StorageService.saveCalendarEvents(globalCalendarEvents);
+                    StorageService.saveTrash(globalTrash);
+                  }
+                });
+              },
+            ),
           ),
-        ));
+        );
       }
     }
   }
@@ -3733,17 +4904,33 @@ class _SmartCalendarTabState extends State<SmartCalendarTab> {
     final color = _eventTypeColor(event['type'] ?? 'other');
     final icon = _eventTypeIcon(event['type'] ?? 'other');
     final timeOfDay = event['time'] as TimeOfDay;
-    final timeStr = '${timeOfDay.hour.toString().padLeft(2, '0')}:${timeOfDay.minute.toString().padLeft(2, '0')}';
+    final timeStr =
+        '${timeOfDay.hour.toString().padLeft(2, '0')}:${timeOfDay.minute.toString().padLeft(2, '0')}';
     final bool isDone = event['isDone'] ?? false;
 
     return AnimatedContainer(
       duration: const Duration(milliseconds: 300),
       margin: const EdgeInsets.only(bottom: 10),
       decoration: BoxDecoration(
-        color: isDone ? (isDark ? const Color(0xFF1A2535) : const Color(0xFFF8FAF8)) : (isDark ? const Color(0xFF1E293B) : Colors.white),
+        color: isDone
+            ? (isDark ? const Color(0xFF1A2535) : const Color(0xFFF8FAF8))
+            : (isDark ? const Color(0xFF1E293B) : Colors.white),
         borderRadius: BorderRadius.circular(14),
-        border: Border(left: BorderSide(color: isDone ? Colors.green.shade400 : color, width: 4)),
-        boxShadow: isDark ? null : [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 8, offset: const Offset(0, 2))],
+        border: Border(
+          left: BorderSide(
+            color: isDone ? Colors.green.shade400 : color,
+            width: 4,
+          ),
+        ),
+        boxShadow: isDark
+            ? null
+            : [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.04),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
+                ),
+              ],
       ),
       child: ListTile(
         contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
@@ -3753,54 +4940,111 @@ class _SmartCalendarTabState extends State<SmartCalendarTab> {
             StorageService.saveCalendarEvents(globalCalendarEvents);
             if (!isDone) {
               ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('✅ ${event['title']}'), duration: const Duration(seconds: 2)),
+                SnackBar(
+                  content: Text('✅ ${event['title']}'),
+                  duration: const Duration(seconds: 2),
+                ),
               );
             }
           },
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 250),
-            width: 34, height: 34,
+            width: 34,
+            height: 34,
             decoration: BoxDecoration(
               color: isDone ? Colors.green.shade400 : Colors.transparent,
               shape: BoxShape.circle,
-              border: Border.all(color: isDone ? Colors.green.shade400 : color, width: 2),
+              border: Border.all(
+                color: isDone ? Colors.green.shade400 : color,
+                width: 2,
+              ),
             ),
-            child: isDone ? const Icon(Icons.check, color: Colors.white, size: 18) : Icon(icon, color: color, size: 16),
+            child: isDone
+                ? const Icon(Icons.check, color: Colors.white, size: 18)
+                : Icon(icon, color: color, size: 16),
           ),
         ),
-        title: Text(event['title'],
-            style: TextStyle(
-              fontWeight: FontWeight.bold, fontSize: 14,
-              color: isDone ? (isDark ? Colors.white38 : Colors.grey.shade500) : (isDark ? Colors.white : const Color(0xFF1E293B)),
-              decoration: isDone ? TextDecoration.lineThrough : TextDecoration.none,
-              decorationColor: Colors.green.shade400, decorationThickness: 2.5,
-            )),
+        title: Text(
+          event['title'],
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 14,
+            color: isDone
+                ? (isDark ? Colors.white38 : Colors.grey.shade500)
+                : (isDark ? Colors.white : const Color(0xFF1E293B)),
+            decoration: isDone
+                ? TextDecoration.lineThrough
+                : TextDecoration.none,
+            decorationColor: Colors.green.shade400,
+            decorationThickness: 2.5,
+          ),
+        ),
         subtitle: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             if ((event['desc'] as String).isNotEmpty) ...[
               const SizedBox(height: 2),
-              Text(event['desc'],
-                  style: TextStyle(fontSize: 11,
-                      color: isDone ? (isDark ? Colors.white24 : Colors.grey.shade400) : (isDark ? Colors.white54 : Colors.grey.shade600),
-                      decoration: isDone ? TextDecoration.lineThrough : TextDecoration.none,
-                      decorationColor: Colors.grey.shade400),
-                  maxLines: 1, overflow: TextOverflow.ellipsis),
+              Text(
+                event['desc'],
+                style: TextStyle(
+                  fontSize: 11,
+                  color: isDone
+                      ? (isDark ? Colors.white24 : Colors.grey.shade400)
+                      : (isDark ? Colors.white54 : Colors.grey.shade600),
+                  decoration: isDone
+                      ? TextDecoration.lineThrough
+                      : TextDecoration.none,
+                  decorationColor: Colors.grey.shade400,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
             ],
             const SizedBox(height: 4),
-            Row(children: [
-              Icon(Icons.access_time, size: 12, color: isDone ? Colors.green.shade400 : color),
-              const SizedBox(width: 4),
-              Text(timeStr, style: TextStyle(fontSize: 11, color: isDone ? Colors.green.shade400 : color, fontWeight: FontWeight.bold,
-                  decoration: isDone ? TextDecoration.lineThrough : TextDecoration.none)),
-              const SizedBox(width: 8),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(color: isDone ? Colors.green.withOpacity(0.1) : color.withOpacity(0.1), borderRadius: BorderRadius.circular(6)),
-                child: Text(isDone ? T.s('eventDone') : _eventTypeLabel(event['type'] ?? 'other'),
-                    style: TextStyle(fontSize: 10, color: isDone ? Colors.green.shade600 : color, fontWeight: FontWeight.bold)),
-              ),
-            ]),
+            Row(
+              children: [
+                Icon(
+                  Icons.access_time,
+                  size: 12,
+                  color: isDone ? Colors.green.shade400 : color,
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  timeStr,
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: isDone ? Colors.green.shade400 : color,
+                    fontWeight: FontWeight.bold,
+                    decoration: isDone
+                        ? TextDecoration.lineThrough
+                        : TextDecoration.none,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 2,
+                  ),
+                  decoration: BoxDecoration(
+                    color: isDone
+                        ? Colors.green.withOpacity(0.1)
+                        : color.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(
+                    isDone
+                        ? T.s('eventDone')
+                        : _eventTypeLabel(event['type'] ?? 'other'),
+                    style: TextStyle(
+                      fontSize: 10,
+                      color: isDone ? Colors.green.shade600 : color,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ],
         ),
         trailing: Row(
@@ -3809,14 +5053,23 @@ class _SmartCalendarTabState extends State<SmartCalendarTab> {
             if (!isDone)
               IconButton(
                 icon: Icon(Icons.edit_outlined, color: color, size: 18),
-                onPressed: () => _openAddEventDialog(existingEvent: event, index: index),
-                padding: EdgeInsets.zero, constraints: const BoxConstraints(), tooltip: T.s('edit'),
+                onPressed: () =>
+                    _openAddEventDialog(existingEvent: event, index: index),
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+                tooltip: T.s('edit'),
               ),
             const SizedBox(width: 6),
             IconButton(
-              icon: const Icon(Icons.delete_outline, color: Colors.redAccent, size: 18),
+              icon: const Icon(
+                Icons.delete_outline,
+                color: Colors.redAccent,
+                size: 18,
+              ),
               onPressed: () => _confirmDeleteEvent(index),
-              padding: EdgeInsets.zero, constraints: const BoxConstraints(), tooltip: T.s('delete'),
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(),
+              tooltip: T.s('delete'),
             ),
           ],
         ),
@@ -3830,7 +5083,10 @@ class _SmartCalendarTabState extends State<SmartCalendarTab> {
     final selectedEvents = _eventsForDay(_selectedDay);
     final upcomingEvents = _upcomingEvents();
     final now = DateTime.now();
-    final isSelectedToday = _selectedDay.year == now.year && _selectedDay.month == now.month && _selectedDay.day == now.day;
+    final isSelectedToday =
+        _selectedDay.year == now.year &&
+        _selectedDay.month == now.month &&
+        _selectedDay.day == now.day;
     return DefaultTabController(
       length: 2,
       child: Column(
@@ -3838,7 +5094,9 @@ class _SmartCalendarTabState extends State<SmartCalendarTab> {
           Container(
             margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             decoration: BoxDecoration(
-              color: isDark ? const Color(0xFF1E293B) : Colors.black.withOpacity(0.05),
+              color: isDark
+                  ? const Color(0xFF1E293B)
+                  : Colors.black.withOpacity(0.05),
               borderRadius: BorderRadius.circular(12),
             ),
             child: TabBar(
@@ -3846,7 +5104,10 @@ class _SmartCalendarTabState extends State<SmartCalendarTab> {
               labelColor: const Color(0xFF6366F1),
               unselectedLabelColor: Colors.grey,
               indicatorSize: TabBarIndicatorSize.tab,
-              tabs: [Tab(text: T.s('calendarWidget')), Tab(text: T.s('upcoming'))],
+              tabs: [
+                Tab(text: T.s('calendarWidget')),
+                Tab(text: T.s('upcoming')),
+              ],
             ),
           ),
           Expanded(
@@ -3862,27 +5123,62 @@ class _SmartCalendarTabState extends State<SmartCalendarTab> {
                         style: ElevatedButton.styleFrom(
                           backgroundColor: const Color(0xFF6366F1),
                           minimumSize: const Size(double.infinity, 48),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
                         ),
                         icon: const Icon(Icons.add, color: Colors.white),
-                        label: Text(T.s('addEvent'), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                        label: Text(
+                          T.s('addEvent'),
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
                         onPressed: () => _openAddEventDialog(),
                       ),
                       const SizedBox(height: 16),
                       Row(
                         children: [
-                          Icon(Icons.event_note, size: 16, color: isDark ? const Color(0xFF6366F1) : const Color(0xFF0284C7)),
+                          Icon(
+                            Icons.event_note,
+                            size: 16,
+                            color: isDark
+                                ? const Color(0xFF6366F1)
+                                : const Color(0xFF0284C7),
+                          ),
                           const SizedBox(width: 6),
                           Text(
-                            isSelectedToday ? T.s('eventsToday') : '${_selectedDay.day}/${_selectedDay.month}/${_selectedDay.year}',
-                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: isDark ? Colors.white : const Color(0xFF1E293B)),
+                            isSelectedToday
+                                ? T.s('eventsToday')
+                                : '${_selectedDay.day}/${_selectedDay.month}/${_selectedDay.year}',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 14,
+                              color: isDark
+                                  ? Colors.white
+                                  : const Color(0xFF1E293B),
+                            ),
                           ),
                           const SizedBox(width: 8),
                           if (selectedEvents.isNotEmpty)
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                              decoration: BoxDecoration(color: const Color(0xFF6366F1), borderRadius: BorderRadius.circular(10)),
-                              child: Text('${selectedEvents.length}', style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 2,
+                              ),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF6366F1),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Text(
+                                '${selectedEvents.length}',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
                             ),
                         ],
                       ),
@@ -3892,19 +5188,36 @@ class _SmartCalendarTabState extends State<SmartCalendarTab> {
                           width: double.infinity,
                           padding: const EdgeInsets.symmetric(vertical: 32),
                           decoration: BoxDecoration(
-                            color: isDark ? const Color(0xFF1E293B) : const Color(0xFFF8FAFC),
+                            color: isDark
+                                ? const Color(0xFF1E293B)
+                                : const Color(0xFFF8FAFC),
                             borderRadius: BorderRadius.circular(14),
                           ),
-                          child: Column(children: [
-                            Icon(Icons.event_available, size: 40, color: Colors.grey.shade400),
-                            const SizedBox(height: 8),
-                            Text(T.s('noEvents'), style: TextStyle(color: Colors.grey.shade500)),
-                          ]),
+                          child: Column(
+                            children: [
+                              Icon(
+                                Icons.event_available,
+                                size: 40,
+                                color: Colors.grey.shade400,
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                T.s('noEvents'),
+                                style: TextStyle(color: Colors.grey.shade500),
+                              ),
+                            ],
+                          ),
                         )
                       else
                         ...selectedEvents.asMap().entries.map((entry) {
-                          final globalIndex = globalCalendarEvents.indexWhere((e) => e['id'] == entry.value['id']);
-                          return _buildEventCard(entry.value, globalIndex, isDark);
+                          final globalIndex = globalCalendarEvents.indexWhere(
+                            (e) => e['id'] == entry.value['id'],
+                          );
+                          return _buildEventCard(
+                            entry.value,
+                            globalIndex,
+                            isDark,
+                          );
                         }).toList(),
                       const SizedBox(height: 16),
                     ],
@@ -3912,60 +5225,126 @@ class _SmartCalendarTabState extends State<SmartCalendarTab> {
                 ),
                 upcomingEvents.isEmpty
                     ? Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.event_busy, size: 60, color: Colors.grey.shade400),
-                      const SizedBox(height: 12),
-                      Text(T.s('noEventsMonth'), style: TextStyle(color: Colors.grey.shade500, fontSize: 14)),
-                      const SizedBox(height: 20),
-                      ElevatedButton.icon(
-                        style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF6366F1), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
-                        icon: const Icon(Icons.add, color: Colors.white),
-                        label: Text(T.s('addEvent'), style: const TextStyle(color: Colors.white)),
-                        onPressed: () => _openAddEventDialog(),
-                      ),
-                    ],
-                  ),
-                )
-                    : ListView.builder(
-                  padding: const EdgeInsets.all(16),
-                  itemCount: upcomingEvents.length,
-                  itemBuilder: (context, index) {
-                    final event = upcomingEvents[index];
-                    final globalIndex = globalCalendarEvents.indexWhere((e) => e['id'] == event['id']);
-                    final eventDate = event['date'] as DateTime;
-                    final isEventToday = eventDate.year == now.year && eventDate.month == now.month && eventDate.day == now.day;
-                    final isTomorrow = eventDate.difference(DateTime(now.year, now.month, now.day)).inDays == 1;
-
-                    return Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        if (index == 0 || _eventsForDay(upcomingEvents[index - 1]['date'] as DateTime).isEmpty ||
-                            !(eventDate.year == (upcomingEvents[index - 1]['date'] as DateTime).year &&
-                                eventDate.month == (upcomingEvents[index - 1]['date'] as DateTime).month &&
-                                eventDate.day == (upcomingEvents[index - 1]['date'] as DateTime).day))
-                          Padding(
-                            padding: EdgeInsets.only(bottom: 8, top: index == 0 ? 0 : 8),
-                            child: Row(children: [
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                decoration: BoxDecoration(
-                                  color: isEventToday ? const Color(0xFF6366F1) : isTomorrow ? const Color(0xFF10B981) : Colors.grey.shade200,
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                child: Text(
-                                  isEventToday ? T.s('today') : isTomorrow ? T.s('tomorrow') : '${eventDate.day}/${eventDate.month}/${eventDate.year}',
-                                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: isEventToday || isTomorrow ? Colors.white : Colors.grey.shade700),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              Icons.event_busy,
+                              size: 60,
+                              color: Colors.grey.shade400,
+                            ),
+                            const SizedBox(height: 12),
+                            Text(
+                              T.s('noEventsMonth'),
+                              style: TextStyle(
+                                color: Colors.grey.shade500,
+                                fontSize: 14,
+                              ),
+                            ),
+                            const SizedBox(height: 20),
+                            ElevatedButton.icon(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFF6366F1),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
                                 ),
                               ),
-                            ]),
-                          ),
-                        _buildEventCard(event, globalIndex, isDark),
-                      ],
-                    );
-                  },
-                ),
+                              icon: const Icon(Icons.add, color: Colors.white),
+                              label: Text(
+                                T.s('addEvent'),
+                                style: const TextStyle(color: Colors.white),
+                              ),
+                              onPressed: () => _openAddEventDialog(),
+                            ),
+                          ],
+                        ),
+                      )
+                    : ListView.builder(
+                        padding: const EdgeInsets.all(16),
+                        itemCount: upcomingEvents.length,
+                        itemBuilder: (context, index) {
+                          final event = upcomingEvents[index];
+                          final globalIndex = globalCalendarEvents.indexWhere(
+                            (e) => e['id'] == event['id'],
+                          );
+                          final eventDate = event['date'] as DateTime;
+                          final isEventToday =
+                              eventDate.year == now.year &&
+                              eventDate.month == now.month &&
+                              eventDate.day == now.day;
+                          final isTomorrow =
+                              eventDate
+                                  .difference(
+                                    DateTime(now.year, now.month, now.day),
+                                  )
+                                  .inDays ==
+                              1;
+
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              if (index == 0 ||
+                                  _eventsForDay(
+                                    upcomingEvents[index - 1]['date']
+                                        as DateTime,
+                                  ).isEmpty ||
+                                  !(eventDate.year ==
+                                          (upcomingEvents[index - 1]['date']
+                                                  as DateTime)
+                                              .year &&
+                                      eventDate.month ==
+                                          (upcomingEvents[index - 1]['date']
+                                                  as DateTime)
+                                              .month &&
+                                      eventDate.day ==
+                                          (upcomingEvents[index - 1]['date']
+                                                  as DateTime)
+                                              .day))
+                                Padding(
+                                  padding: EdgeInsets.only(
+                                    bottom: 8,
+                                    top: index == 0 ? 0 : 8,
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 10,
+                                          vertical: 4,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: isEventToday
+                                              ? const Color(0xFF6366F1)
+                                              : isTomorrow
+                                              ? const Color(0xFF10B981)
+                                              : Colors.grey.shade200,
+                                          borderRadius: BorderRadius.circular(
+                                            8,
+                                          ),
+                                        ),
+                                        child: Text(
+                                          isEventToday
+                                              ? T.s('today')
+                                              : isTomorrow
+                                              ? T.s('tomorrow')
+                                              : '${eventDate.day}/${eventDate.month}/${eventDate.year}',
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.bold,
+                                            color: isEventToday || isTomorrow
+                                                ? Colors.white
+                                                : Colors.grey.shade700,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              _buildEventCard(event, globalIndex, isDark),
+                            ],
+                          );
+                        },
+                      ),
               ],
             ),
           ),
